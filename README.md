@@ -53,7 +53,7 @@ Enable researchers, developers, startups, and enterprises to model and benchmark
 
 ## Status
 
-🚧 Under Active Development
+🚧 Early-stage open-source project. Initial architecture and documentation are under active development.
 
 ---
 
