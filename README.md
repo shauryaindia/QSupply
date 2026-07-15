@@ -1,3 +1,6 @@
+<img width="501" height="501" alt="QSupply Logo" src="https://github.com/user-attachments/assets/9b2c32df-9456-4ea1-b8ae-f8d3fde0ea1c" />
+
+
 # QSupply
 
 QSupply is an open-source hybrid quantum-classical optimization framework for enterprise supply chain, logistics, and import-export optimization.
