@@ -5,6 +5,8 @@
 
 QSupply is an open-source hybrid quantum-classical optimization framework for enterprise supply chain, logistics, and import-export optimization.
 
+> **QSupply is an open-source product developed and maintained by MacroVision AI Pvt. Ltd.**
+
 ## Vision
 
 Enable researchers, developers, startups, and enterprises to model and benchmark real-world optimization problems using quantum and classical optimization techniques.
