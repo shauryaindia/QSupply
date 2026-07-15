@@ -63,3 +63,9 @@ Enable researchers, developers, startups, and enterprises to model and benchmark
 ## License
 
 MIT License
+
+## Copyright
+
+© 2026 MacroVision AI Pvt. Ltd. All Rights Reserved.
+
+For questions, collaborations, or contributions, please contact **s@macrovisionai.com**.
