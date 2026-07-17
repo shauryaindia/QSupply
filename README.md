@@ -3,35 +3,58 @@
 
 # QSupply
 
-QSupply is an hybrid quantum-classical optimization framework for enterprise supply chain, logistics, and import-export optimization.
+QSupply is an enterprise optimization platform under active development, designed to model, solve, and benchmark complex optimization problems using mathematical optimization, heuristics, metaheuristics, and emerging hybrid quantum-classical approaches.
+
+The initial focus is supply chain, logistics, manufacturing, and scheduling optimization, with a long-term vision of supporting enterprise decision intelligence across industries.
 
 > **QSupply is product developed and maintained by MacroVision AI Pvt. Ltd.**
 
 ## Vision
 
-Enable researchers, developers, startups, and enterprises to model and benchmark real-world optimization problems using quantum and classical optimization techniques.
+Build a modern optimization platform that enables enterprises and researchers to model, benchmark, and solve real-world optimization problems using the most appropriate computational approach—whether classical, heuristic, metaheuristic, hybrid, or quantum.
 
 ---
 
-## Features (Planned)
+## Planned Capabilities
 
+### Optimization Modeling
+
+- Mathematical Optimization
 - QUBO Problem Builder
-- QAOA Workflows
+- Constraint Modeling
+- Multi-objective Optimization
+
+### Solvers
+
+- Classical Optimization
+- Heuristic Optimization
+- Metaheuristic Optimization
 - Hybrid Quantum-Classical Optimization
-- Benchmark Datasets
-- Classical Baselines
-- Enterprise Logistics Examples
-- Documentation
-- Tutorials
+
+### Benchmarking
+
+- Solver Benchmarking
+- Performance Comparison
+- Standard Optimization Datasets
+
+### Enterprise Applications
+
+- Supply Chain
+- Vehicle Routing
+- Production Scheduling
+- Inventory Optimization
+- Network Design
 
 ---
 
 ## Supported Frameworks
 
+- OR-Tools
+- Pyomo
+- PuLP
 - Qiskit
 - PennyLane
 - Qulacs
-- OR-Tools
 - NumPy
 - SciPy
 
@@ -40,31 +63,59 @@ Enable researchers, developers, startups, and enterprises to model and benchmark
 ## Roadmap
 
 ### Phase 1
-- Project Architecture
-- QUBO Templates
-- Benchmark Datasets
+
+- Core Optimization Architecture
+- Classical Optimization Modules
+- Benchmark Framework
 
 ### Phase 2
-- Quantum Optimization Modules
-- Hybrid Solvers
-- Classical Baselines
+
+- Hybrid Optimization Engine
+- Quantum Integrations
+- Enterprise Optimization Workflows
 
 ### Phase 3
-- Documentation
-- Tutorials
-- Community Contributions
+
+- Enterprise APIs
+- Performance Benchmarking
+- Production Deployment
 
 ---
+
+## Design Principles
+
+- Solver-agnostic architecture
+- Benchmark-driven optimization
+- Modular design
+- Enterprise-first engineering
+- Hybrid computing where appropriate
+
+---
+
+## Philosophy
+
+QSupply is solver-agnostic.
+
+Rather than assuming a particular optimization paradigm is superior, QSupply aims to benchmark and apply the most appropriate computational approach for each problem—whether mathematical optimization, heuristics, metaheuristics, hybrid methods, or quantum computing.
+
+---
+
 
 ## Status
 
-🚧 Early-stage. Initial architecture and documentation are under active development.
+🚧 QSupply is currently in the research and architecture phase.
+
+Current focus:
+- System architecture and core optimization framework
+- Benchmark problem definitions
+- Classical optimization baselines
+- Hybrid quantum-classical workflows
+- Initial enterprise use cases in supply chain and logistics
+
+The first public prototype is under development.
 
 ---
 
-## License
-
-MIT License
 
 ## Copyright
 
