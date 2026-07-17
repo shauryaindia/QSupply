@@ -17,34 +17,41 @@ Build a modern optimization platform that enables enterprises and researchers to
 
 ## Planned Capabilities
 
-### Optimization Modeling
+### Optimization Framework
 
 - Mathematical Optimization
-- QUBO Problem Builder
-- Constraint Modeling
+- Constraint Optimization
 - Multi-objective Optimization
+- Optimization Modeling
 
-### Solvers
+### Optimization Engines
 
 - Classical Optimization
 - Heuristic Optimization
 - Metaheuristic Optimization
 - Hybrid Quantum-Classical Optimization
 
-### Benchmarking
+### Benchmarking & Evaluation
 
 - Solver Benchmarking
-- Performance Comparison
+- Performance Analysis
 - Standard Optimization Datasets
+- Classical vs Hybrid Benchmarking
 
-### Enterprise Applications
+### Enterprise Optimization
 
-- Supply Chain
-- Vehicle Routing
+- Supply Chain Optimization
+- Logistics & Vehicle Routing
 - Production Scheduling
 - Inventory Optimization
 - Network Design
+- Resource Allocation
 
+### Quantum Optimization
+
+- QUBO Problem Builder
+- QAOA Workflows
+- Quantum Solver Integrations
 ---
 
 ## Supported Frameworks
