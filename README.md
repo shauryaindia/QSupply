@@ -15,6 +15,18 @@ Build a modern optimization platform that enables enterprises and researchers to
 
 ---
 
+## Why QSupply?
+
+Modern enterprises face increasingly complex optimization challenges across supply chains, logistics, manufacturing, scheduling, and resource planning. Selecting the right optimization approach is often as important as solving the problem itself.
+
+QSupply aims to provide a unified platform for modeling, benchmarking, and solving enterprise optimization problems using mathematical optimization, heuristics, metaheuristics, and emerging hybrid quantum-classical techniques.
+
+Rather than assuming any single optimization paradigm is universally superior, QSupply is built on a solver-agnostic philosophy—benchmarking multiple approaches and applying the most appropriate computational method for each problem.
+
+Our vision is to bridge Operations Research, Artificial Intelligence, and Quantum Computing to enable the next generation of enterprise decision intelligence.
+
+---
+
 ## Planned Capabilities
 
 ### Optimization Framework
