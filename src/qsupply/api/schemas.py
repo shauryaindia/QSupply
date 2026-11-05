@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SolverId(str, Enum):
@@ -92,6 +92,12 @@ class NetworkNode(BaseModel):
     label: str
     kind: str
     country_code: str | None
+    country_name: str | None = None
+    region: str | None = None
+    timezone: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    transfer_modes: list[str] = Field(default_factory=list)
 
 
 class NetworkLink(BaseModel):
@@ -107,6 +113,9 @@ class NetworkLink(BaseModel):
     carbon_per_quantity_unit: float
     available: bool
     capabilities: list[str]
+    distance_km: float | None = None
+    geometry: list[tuple[float, float]] = Field(default_factory=list)
+    resilience_exposure: float = 0
 
 
 class NetworkScenario(BaseModel):
@@ -131,6 +140,153 @@ class NetworkResponse(BaseModel):
     nodes: list[NetworkNode]
     links: list[NetworkLink]
     scenarios: list[NetworkScenario]
+
+
+class GlobalShipment(BaseModel):
+    id: str
+    origin_id: str
+    origin_name: str
+    destination_id: str
+    destination_name: str
+    quantity: int
+    quantity_unit: str
+    cargo_category: str
+    priority: int
+    deadline: float
+    deadline_unit: str
+    delay_penalty_per_day: float
+    maximum_transit_time: float
+    departure_time: datetime
+    synthetic: bool = True
+
+
+class ObjectiveWeightsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cost: int = Field(default=40, ge=0, le=100)
+    delivery_time: int = Field(default=25, ge=0, le=100)
+    carbon: int = Field(default=20, ge=0, le=100)
+    resilience: int = Field(default=15, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def validate_total(self) -> "ObjectiveWeightsInput":
+        if self.cost + self.delivery_time + self.carbon + self.resilience != 100:
+            raise ValueError("objective weights must total 100")
+        return self
+
+
+class GlobalRoutesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shipment_id: str = Field(min_length=1)
+    scenario_id: str | None = None
+    max_routes: int = Field(default=8, ge=1, le=8)
+
+
+class GlobalOptimizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str | None = "synthetic-suez-capacity-restriction"
+    weights: ObjectiveWeightsInput = Field(default_factory=ObjectiveWeightsInput)
+    max_routes: int = Field(default=8, ge=1, le=8)
+
+
+class RouteLegResponse(BaseModel):
+    link_id: str
+    origin_id: str
+    destination_id: str
+    mode: str
+    distance_km: float
+    transit_time: float
+    freight_cost: float
+    carbon_kg: float
+    capacity: int | None
+    geometry: list[tuple[float, float]]
+
+
+class CandidateRouteResponse(BaseModel):
+    id: str
+    shipment_id: str
+    location_ids: list[str]
+    link_ids: list[str]
+    legs: list[RouteLegResponse]
+    modes: list[str]
+    distance_km: float
+    transit_time: float
+    freight_cost: float
+    carbon_kg: float
+    resilience_exposure: float
+    transfer_count: int
+    bottleneck_capacity: int | None
+    geometry: list[tuple[float, float]]
+
+
+class PlanMetricsResponse(BaseModel):
+    freight_cost: float
+    delay_penalty: float
+    total_cost: float
+    delivery_time: float
+    carbon_kg: float
+    resilience_exposure: float
+    weighted_objective: float
+
+
+class RouteAssignmentResponse(BaseModel):
+    routes: dict[str, CandidateRouteResponse]
+    alternatives: dict[str, list[CandidateRouteResponse]]
+    metrics: PlanMetricsResponse
+    capacity_usage: dict[str, int]
+    capacity_utilization: dict[str, float]
+    method: str
+
+
+class ObjectiveReferencesResponse(BaseModel):
+    cost: float
+    delivery_time: float
+    carbon: float
+    resilience: float
+
+
+class GlobalOptimizationResult(BaseModel):
+    id: str
+    status: str
+    synthetic: bool = True
+    scenario_id: str | None
+    weights: ObjectiveWeightsInput
+    normalization_references: ObjectiveReferencesResponse
+    recovery_feasible: bool
+    failure_reason: str | None
+    baseline: RouteAssignmentResponse
+    recovery: RouteAssignmentResponse | None
+    algorithm: str
+    optimality_scope: str
+
+
+class GlobalOptimizationRecord(BaseModel):
+    id: str
+    status: str
+    created_at: datetime
+    scenario_id: str | None
+    weights: ObjectiveWeightsInput
+    result: GlobalOptimizationResult | None = None
+    error: str | None = None
+
+
+class GlobalOptimizationListResponse(BaseModel):
+    items: list[GlobalOptimizationRecord]
+
+
+class ShipmentPositionResponse(BaseModel):
+    shipment_id: str
+    status: str
+    position: tuple[float, float]
+    current_leg_id: str | None
+    current_mode: str | None
+    elapsed_time: float
+    remaining_time: float
+    departure_time: datetime
+    estimated_arrival: datetime
+    time_unit: str
 
 
 class HealthResponse(BaseModel):

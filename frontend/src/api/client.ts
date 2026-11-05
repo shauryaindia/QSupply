@@ -7,8 +7,23 @@ export type NetworkResponse = components["schemas"]["NetworkResponse"];
 export type RunRecord = components["schemas"]["RunRecord"];
 export type RunResult = components["schemas"]["RunResult"];
 export type SolverId = components["schemas"]["SolverId"];
+export type GlobalShipment = components["schemas"]["GlobalShipment"];
+export type CandidateRoute = components["schemas"]["CandidateRouteResponse"];
+export type GlobalOptimization = components["schemas"]["GlobalOptimizationRecord"];
 
 type RunCreate = paths["/api/v1/runs"]["post"]["requestBody"] extends {
+  content: { "application/json": infer Body };
+}
+  ? Body
+  : never;
+
+type GlobalRoutesRequest = paths["/api/v1/global/routes"]["post"]["requestBody"] extends {
+  content: { "application/json": infer Body };
+}
+  ? Body
+  : never;
+
+type GlobalOptimizationRequest = paths["/api/v1/global/optimizations"]["post"]["requestBody"] extends {
   content: { "application/json": infer Body };
 }
   ? Body
@@ -47,6 +62,30 @@ export const api = {
   capabilities: () => request<Capabilities>("/api/v1/capabilities"),
   instances: () => request<InstanceSummary[]>("/api/v1/instances"),
   network: () => request<NetworkResponse>("/api/v1/networks/demo"),
+  globalNetwork: () => request<NetworkResponse>("/api/v1/global/network"),
+  globalShipments: () => request<GlobalShipment[]>("/api/v1/global/shipments"),
+  globalScenarios: () =>
+    request<components["schemas"]["NetworkScenario"][]>("/api/v1/global/scenarios"),
+  globalRoutes: (input: GlobalRoutesRequest) =>
+    request<CandidateRoute[]>("/api/v1/global/routes", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  globalOptimizations: () =>
+    request<components["schemas"]["GlobalOptimizationListResponse"]>(
+      "/api/v1/global/optimizations",
+    ),
+  globalOptimization: (id: string) =>
+    request<GlobalOptimization>(`/api/v1/global/optimizations/${encodeURIComponent(id)}`),
+  createGlobalOptimization: (input: GlobalOptimizationRequest) =>
+    request<GlobalOptimization>("/api/v1/global/optimizations", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  shipmentPosition: (runId: string, shipmentId: string, elapsedTime: number) =>
+    request<components["schemas"]["ShipmentPositionResponse"]>(
+      `/api/v1/global/optimizations/${encodeURIComponent(runId)}/shipments/${encodeURIComponent(shipmentId)}/position?elapsed_time=${elapsedTime}`,
+    ),
   runs: () => request<components["schemas"]["RunListResponse"]>("/api/v1/runs"),
   run: (id: string) =>
     request<RunRecord>(`/api/v1/runs/${encodeURIComponent(id)}`),

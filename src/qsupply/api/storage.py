@@ -1,5 +1,7 @@
 """Transactional run-history stores for local SQLite and PostgreSQL deployments."""
 
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
@@ -13,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 from .schemas import RunRecord
 
 _POSTGRES_SCHEMA_LOCK = 0x51535550504C59
-_LATEST_SCHEMA_VERSION = 2
+_LATEST_SCHEMA_VERSION = 3
 
 
 def utc_now() -> datetime:
@@ -144,6 +146,30 @@ class RunStore:
                         connection,
                         "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
                         (2, self._timestamp()),
+                    )
+                    applied.add(2)
+
+                if 3 not in applied:
+                    self._execute(
+                        connection,
+                        "CREATE TABLE IF NOT EXISTS global_optimization_runs ("
+                        "id TEXT PRIMARY KEY,"
+                        "status TEXT NOT NULL,"
+                        f"created_at {timestamp_type} NOT NULL,"
+                        "scenario_id TEXT,"
+                        "weights_json TEXT NOT NULL,"
+                        "result_json TEXT,"
+                        "error TEXT)",
+                    )
+                    self._execute(
+                        connection,
+                        "CREATE INDEX IF NOT EXISTS idx_global_runs_created_at "
+                        "ON global_optimization_runs(created_at DESC)",
+                    )
+                    self._execute(
+                        connection,
+                        "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                        (3, self._timestamp()),
                     )
 
                 self._execute(
@@ -280,6 +306,90 @@ class RunStore:
                 (limit,),
             ).fetchall()
         return [record for row in rows if (record := self._record(row)) is not None]
+
+    @staticmethod
+    def _global_record(row: Any | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "scenario_id": row["scenario_id"],
+            "weights": json.loads(row["weights_json"]),
+            "result": json.loads(row["result_json"]) if row["result_json"] else None,
+            "error": row["error"],
+        }
+
+    def create_global_optimization(
+        self, run_id: str, scenario_id: str | None, weights: dict[str, int]
+    ) -> dict[str, Any]:
+        self.initialize()
+        with self._connection() as connection:
+            self._execute(
+                connection,
+                "INSERT INTO global_optimization_runs "
+                "(id, status, created_at, scenario_id, weights_json) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    "running",
+                    self._timestamp(),
+                    scenario_id,
+                    json.dumps(weights, separators=(",", ":")),
+                ),
+            )
+        record = self.get_global_optimization(run_id)
+        if record is None:
+            raise RuntimeError("Global optimization run was not persisted")
+        return record
+
+    def complete_global_optimization(
+        self, run_id: str, result: dict[str, Any]
+    ) -> None:
+        self.initialize()
+        with self._connection() as connection:
+            cursor = self._execute(
+                connection,
+                "UPDATE global_optimization_runs SET status='completed', "
+                "result_json=?, error=NULL WHERE id=? AND status='running'",
+                (json.dumps(result, separators=(",", ":")), run_id),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("Global optimization run is missing or no longer running")
+
+    def fail_global_optimization(self, run_id: str, message: str) -> None:
+        self.initialize()
+        with self._connection() as connection:
+            cursor = self._execute(
+                connection,
+                "UPDATE global_optimization_runs SET status='failed', error=? "
+                "WHERE id=? AND status='running'",
+                (message, run_id),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("Global optimization run is missing or no longer running")
+
+    def get_global_optimization(self, run_id: str) -> dict[str, Any] | None:
+        self.initialize()
+        with self._connection() as connection:
+            row = self._execute(
+                connection,
+                "SELECT * FROM global_optimization_runs WHERE id=?",
+                (run_id,),
+            ).fetchone()
+        return self._global_record(row)
+
+    def list_global_optimizations(self, limit: int = 100) -> list[dict[str, Any]]:
+        self.initialize()
+        with self._connection() as connection:
+            rows = self._execute(
+                connection,
+                "SELECT * FROM global_optimization_runs "
+                "ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [record for row in rows if (record := self._global_record(row)) is not None]
 
 
 class SQLiteRunStore(RunStore):

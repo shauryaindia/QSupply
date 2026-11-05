@@ -97,6 +97,72 @@ class TestNetworkModels(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "location ID must be a string"):
             Location(1, LocationKind.PORT)
 
+    def test_location_validates_geography_timezone_and_transfer_modes(self):
+        location = Location(
+            "port-geo",
+            LocationKind.PORT,
+            "IN",
+            country_name="India",
+            region="South Asia",
+            timezone="Asia/Kolkata",
+            latitude=18.9,
+            longitude=72.8,
+            transfer_modes={"road", TransportMode.SEA},
+        )
+        self.assertEqual(location.latitude, 18.9)
+        self.assertEqual(location.transfer_modes, {TransportMode.ROAD, TransportMode.SEA})
+        with self.assertRaisesRegex(ValueError, "provided together"):
+            Location("one-coordinate", LocationKind.OTHER, latitude=0)
+        with self.assertRaisesRegex(ValueError, "latitude"):
+            Location("bad-latitude", LocationKind.OTHER, latitude=91, longitude=0)
+        with self.assertRaisesRegex(TypeError, "longitude must be a real number"):
+            Location("bad-longitude", LocationKind.OTHER, latitude=0, longitude=True)
+        with self.assertRaisesRegex(ValueError, "unknown IANA time zone"):
+            Location("bad-timezone", LocationKind.OTHER, timezone="Mars/Olympus")
+
+    def test_link_validates_distance_resilience_and_geometry_endpoints(self):
+        points = {
+            "factory": Location("factory", LocationKind.FACTORY, latitude=1, longitude=2),
+            "port": Location("port", LocationKind.PORT, latitude=3, longitude=4),
+        }
+        link = TransportLink(
+            "geo-road",
+            "factory",
+            "port",
+            TransportMode.ROAD,
+            5,
+            "load_unit",
+            1,
+            1,
+            1,
+            0.5,
+            distance_km=250,
+            geometry=((1, 2), (2, 3), (3, 4)),
+            resilience_exposure=0.25,
+        )
+        TransportationNetwork(points, (link,), "load_unit", "EUR", "day", "kgCO2e")
+        mismatched = TransportLink(
+            "geo-road-2",
+            "factory",
+            "port",
+            TransportMode.ROAD,
+            5,
+            "load_unit",
+            1,
+            1,
+            1,
+            0.5,
+            distance_km=250,
+            geometry=((0, 0), (3, 4)),
+        )
+        with self.assertRaisesRegex(ValueError, "geometry endpoints"):
+            TransportationNetwork(points, (mismatched,), "load_unit", "EUR", "day", "kgCO2e")
+        with self.assertRaisesRegex(ValueError, "resilience_exposure"):
+            TransportLink(
+                "risk", "factory", "port", "road", 5, "load_unit", 1, 1, 1, 0.5,
+                resilience_exposure=1.1,
+            )
+
     def test_link_accepts_string_mode_and_checks_directed_endpoints(self):
         link = TransportLink(
             "air-1",

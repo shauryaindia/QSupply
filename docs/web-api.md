@@ -25,6 +25,16 @@ The OpenAPI document is served at `http://127.0.0.1:8000/openapi.json`.
 - `GET /api/v1/networks/demo` returns validated synthetic India–Europe network
   data, including a corridor closure scenario. It does not optimize or recover
   routes.
+- `GET /api/v1/global/network`, `/shipments`, `/shipments/{id}`, and
+  `/scenarios` expose the separate geocoded synthetic global demonstration.
+- `POST /api/v1/global/routes` generates and validates bounded candidate routes
+  for a shipment under an optional disruption scenario.
+- `POST /api/v1/global/optimizations` persists and evaluates a baseline
+  shipment-to-route assignment and, when requested, a disruption recovery
+  assignment. `GET /api/v1/global/optimizations` and
+  `/optimizations/{id}` return the persisted run history/result.
+- `GET /api/v1/global/optimizations/{run_id}/shipments/{shipment_id}/position`
+  returns deterministic simulated movement at the supplied elapsed time.
 - `POST /api/v1/runs` queues a real QSupply nearest-neighbour,
   nearest-neighbour + 2-opt, or exact CVRP solver run.
 - `GET /api/v1/runs` and `GET /api/v1/runs/{id}` return persistent run
@@ -40,8 +50,8 @@ If `DATABASE_URL` is set, the API uses PostgreSQL through Psycopg. Render's
 
 Schema changes are applied transactionally at first store use and tracked in
 `schema_migrations`. Version 1 creates the original run-history schema;
-version 2 adds a private request-input JSON column. Existing SQLite rows are
-preserved and receive an empty request payload during migration. Future
+version 2 adds a private request-input JSON column; version 3 creates global
+optimization run-history storage. Existing run records are preserved. Future
 database changes should add a new numbered migration rather than editing
 applied versions. Selecting PostgreSQL does not copy historical rows from a
 previous SQLite file; export/import that history separately before a production
@@ -66,3 +76,13 @@ the core package.
 
 This local API uses FastAPI's in-process background task mechanism. It is
 appropriate for small local examples, not a durable distributed job queue.
+
+The global demonstration uses synthetic routes, prices, transit times, capacity
+and emissions. Global candidate paths are bounded and deterministic, and the
+shipment assignment search is exact only over those generated candidates and
+is limited to small batches. Resilience is a normalized route exposure metric;
+recovery feasibility is separately checked against scenario capacities.
+Movement positions are deterministic interpolations along supplied synthetic
+route geometry and do not represent live tracking. The map uses OpenStreetMap
+tiles with visible attribution; the public tile service is for ordinary
+interactive use and has no production service guarantee.

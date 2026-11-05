@@ -13,9 +13,12 @@ from enum import Enum
 from math import isfinite
 from numbers import Real
 from types import MappingProxyType
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class LocationKind(str, Enum):
+    CITY = "city"
+    MULTIMODAL_HUB = "multimodal_hub"
     FACTORY = "factory"
     PORT = "port"
     AIRPORT = "airport"
@@ -56,6 +59,18 @@ def _non_negative_real(value: object, label: str) -> Real:
     return value
 
 
+def _coordinate(value: object, label: str, minimum: int, maximum: int) -> Real:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError(f"{label} must be a real number")
+    try:
+        finite = isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite or value < minimum or value > maximum:
+        raise ValueError(f"{label} must be between {minimum} and {maximum}")
+    return value
+
+
 def _tags(values: Iterable[str], label: str) -> frozenset[str]:
     if isinstance(values, str):
         raise TypeError(f"{label} must be an iterable of strings, not a string")
@@ -89,11 +104,17 @@ def _multiplier_mapping(
 
 @dataclass(frozen=True)
 class Location:
-    """A factory, transfer hub, warehouse, destination, or other node."""
+    """A geospatially identified city, terminal, warehouse, or transfer node."""
 
     id: str
     kind: LocationKind
     country_code: str | None = None
+    country_name: str | None = None
+    region: str | None = None
+    timezone: str | None = None
+    latitude: Real | None = None
+    longitude: Real | None = None
+    transfer_modes: frozenset[TransportMode] = frozenset()
 
     def __post_init__(self) -> None:
         _name(self.id, "location ID")
@@ -104,6 +125,33 @@ class Location:
         object.__setattr__(self, "kind", kind)
         if self.country_code is not None:
             _name(self.country_code, "country_code")
+        for attribute in ("country_name", "region"):
+            value = getattr(self, attribute)
+            if value is not None:
+                _name(value, attribute)
+        if self.timezone is not None:
+            _name(self.timezone, "timezone")
+            try:
+                ZoneInfo(self.timezone)
+            except ZoneInfoNotFoundError as error:
+                raise ValueError(f"unknown IANA time zone {self.timezone!r}") from error
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be provided together")
+        if self.latitude is not None and self.longitude is not None:
+            object.__setattr__(
+                self, "latitude", _coordinate(self.latitude, "latitude", -90, 90)
+            )
+            object.__setattr__(
+                self, "longitude", _coordinate(self.longitude, "longitude", -180, 180)
+            )
+        try:
+            transfer_modes = frozenset(
+                mode if isinstance(mode, TransportMode) else TransportMode(mode)
+                for mode in self.transfer_modes
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("transfer_modes must contain supported transport modes") from error
+        object.__setattr__(self, "transfer_modes", transfer_modes)
 
 
 @dataclass(frozen=True)
@@ -128,6 +176,9 @@ class TransportLink:
     carbon_per_quantity_unit: Real
     available: bool = True
     capabilities: frozenset[str] = frozenset()
+    distance_km: Real | None = None
+    geometry: tuple[tuple[Real, Real], ...] = ()
+    resilience_exposure: Real = 0
 
     def __post_init__(self) -> None:
         _name(self.id, "link ID")
@@ -160,6 +211,34 @@ class TransportLink:
         if not isinstance(self.available, bool):
             raise TypeError("available must be a Boolean")
         object.__setattr__(self, "capabilities", _tags(self.capabilities, "capabilities"))
+        if self.distance_km is not None:
+            distance = _non_negative_real(self.distance_km, "distance_km")
+            if distance == 0:
+                raise ValueError("distance_km must be positive when provided")
+        exposure = _non_negative_real(self.resilience_exposure, "resilience_exposure")
+        if exposure > 1:
+            raise ValueError("resilience_exposure must be between 0 and 1")
+        object.__setattr__(self, "geometry", _geometry(self.geometry))
+
+
+def _geometry(value: Iterable[tuple[Real, Real]]) -> tuple[tuple[Real, Real], ...]:
+    """Validate a path as an ordered sequence of latitude/longitude points."""
+    if isinstance(value, str):
+        raise TypeError("geometry must be an iterable of (latitude, longitude) pairs")
+    try:
+        points = tuple(value)
+    except TypeError as error:
+        raise TypeError("geometry must be an iterable of coordinate pairs") from error
+    if points and len(points) < 2:
+        raise ValueError("link geometry must contain at least two points")
+    copied: list[tuple[Real, Real]] = []
+    for point in points:
+        if not isinstance(point, (tuple, list)) or len(point) != 2:
+            raise ValueError("each geometry point must be a (latitude, longitude) pair")
+        latitude = _coordinate(point[0], "geometry latitude", -90, 90)
+        longitude = _coordinate(point[1], "geometry longitude", -180, 180)
+        copied.append((latitude, longitude))
+    return tuple(copied)
 
 
 @dataclass(frozen=True)
@@ -240,6 +319,16 @@ class TransportationNetwork:
                     f"link {link.id!r} references an unknown endpoint: "
                     f"{link.origin_id!r} -> {link.destination_id!r}"
                 )
+            if link.geometry:
+                origin = locations[link.origin_id]
+                destination = locations[link.destination_id]
+                if origin.latitude is not None and destination.latitude is not None:
+                    expected_start = (origin.latitude, origin.longitude)
+                    expected_end = (destination.latitude, destination.longitude)
+                    if link.geometry[0] != expected_start or link.geometry[-1] != expected_end:
+                        raise ValueError(
+                            f"link {link.id!r} geometry endpoints must match its location coordinates"
+                        )
         object.__setattr__(self, "links", links)
 
         for attribute in ("quantity_unit", "cost_unit", "time_unit", "carbon_unit"):

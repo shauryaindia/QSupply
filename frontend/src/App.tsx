@@ -4,23 +4,26 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
   type ReactNode,
 } from "react";
-import type { Core } from "cytoscape";
+import GlobalNetworkMap from "./GlobalNetworkMap";
 import {
   api,
   distanceChartValue,
   formatDistance,
   formatNumber,
   type Capabilities,
+  type CandidateRoute,
+  type GlobalOptimization,
+  type GlobalShipment,
   type InstanceSummary,
   type NetworkResponse,
   type RunRecord,
   type SolverId,
 } from "./api/client";
+import type { components } from "./api/generated";
 
 type Page = "overview" | "workspace" | "network" | "benchmarking" | "quantum";
 
@@ -786,297 +789,367 @@ function ResultDetails({ run }: { run: RunRecord }) {
 }
 
 function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
-  const container = useRef<HTMLDivElement>(null);
-  const core = useRef<Core | null>(null);
+  const [shipments, setShipments] = useState<GlobalShipment[]>([]);
   const [scenarioId, setScenarioId] = useState("");
-  const scenario = network?.scenarios.find((item) => item.id === scenarioId);
+  const [shipmentId, setShipmentId] = useState("");
+  const [routeCandidates, setRouteCandidates] = useState<CandidateRoute[]>([]);
+  const [activeRun, setActiveRun] = useState<GlobalOptimization | null>(null);
+  const [history, setHistory] = useState<GlobalOptimization[]>([]);
+  const [weights, setWeights] = useState({
+    cost: 40,
+    delivery_time: 25,
+    carbon: 20,
+    resilience: 15,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<
+    NetworkResponse["nodes"][number] | null
+  >(null);
+  const [modeFilters, setModeFilters] = useState<Set<string>>(
+    () => new Set(["road", "rail", "sea", "air"]),
+  );
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [simulationSpeed, setSimulationSpeed] = useState(1);
+  const [playing, setPlaying] = useState(false);
+  const [movement, setMovement] = useState<
+    components["schemas"]["ShipmentPositionResponse"] | null
+  >(null);
+
   useEffect(() => {
-    if (!container.current || !network) return;
-    core.current?.destroy();
-    let canceled = false;
-    const closed = new Set(scenario?.closed_link_ids ?? []);
-    const unavailable = new Set(scenario?.unavailable_location_ids ?? []);
-    const nodes = network.nodes.map((node) => ({
-      data: { id: node.id, label: node.label, kind: node.kind },
-      classes: unavailable.has(node.id) ? "disrupted" : "",
-    }));
-    const edges = network.links.map((link) => ({
-      data: {
-        id: link.id,
-        source: link.source,
-        target: link.target,
-        label: `${link.mode} · ${scenario?.capacity_overrides[link.id] ?? link.capacity ?? "∞"} ${link.capacity_unit}`,
-      },
-      classes:
-        `${closed.has(link.id) || !link.available ? "disrupted " : ""}${link.mode}`.trim(),
-    }));
-    void import("cytoscape").then(({ default: createCytoscape }) => {
-      if (canceled || !container.current) return;
-      core.current = createCytoscape({
-        container: container.current,
-        elements: [...nodes, ...edges],
-        layout: {
-          name: "cose",
-          animate: false,
-          padding: 40,
-          nodeRepulsion: () => 6500,
-          idealEdgeLength: () => 115,
-        },
-        style: [
-          {
-            selector: "node",
-            style: {
-              "background-color": "#ffffff",
-              "border-color": "#9cc7c1",
-              "border-width": "2px",
-              label: "data(label)",
-              color: "#263448",
-              "font-size": 10,
-              "font-weight": 600,
-              "text-wrap": "wrap",
-              "text-max-width": "90px",
-              width: "35px",
-              height: "35px",
-              "text-valign": "bottom",
-              "text-margin-y": 7,
-            },
-          },
-          {
-            selector: "node[kind = 'factory']",
-            style: {
-              "background-color": "#d9eeeb",
-              "border-color": "#439b8f",
-              shape: "round-rectangle",
-            },
-          },
-          {
-            selector: "node[kind = 'destination']",
-            style: {
-              "background-color": "#e8eefb",
-              "border-color": "#829bd5",
-              shape: "diamond",
-            },
-          },
-          {
-            selector: "node[kind = 'airport']",
-            style: {
-              "background-color": "#f2ecff",
-              "border-color": "#a288d0",
-              shape: "hexagon",
-            },
-          },
-          {
-            selector: "node[kind = 'rail_terminal']",
-            style: {
-              "background-color": "#fdf1df",
-              "border-color": "#d6a861",
-              shape: "rectangle",
-            },
-          },
-          {
-            selector: "node.disrupted",
-            style: { "border-color": "#d46b62", "border-width": 3 },
-          },
-          {
-            selector: "edge",
-            style: {
-              width: "2px",
-              "line-color": "#9db8b5",
-              "target-arrow-color": "#9db8b5",
-              "target-arrow-shape": "triangle",
-              "curve-style": "bezier",
-              label: "data(label)",
-              "font-size": 8,
-              color: "#667487",
-              "text-background-color": "#f8fafc",
-              "text-background-opacity": 0.95,
-              "text-background-padding": "2px",
-              "text-rotation": "autorotate",
-            },
-          },
-          {
-            selector: "edge.rail",
-            style: {
-              "line-color": "#d09b4a",
-              "target-arrow-color": "#d09b4a",
-              "line-style": "dashed",
-            },
-          },
-          {
-            selector: "edge.sea",
-            style: {
-              "line-color": "#5a93c8",
-              "target-arrow-color": "#5a93c8",
-              "line-style": "solid",
-            },
-          },
-          {
-            selector: "edge.air",
-            style: {
-              "line-color": "#9b7bc6",
-              "target-arrow-color": "#9b7bc6",
-              "line-style": "dotted",
-            },
-          },
-          {
-            selector: "edge.disrupted",
-            style: {
-              "line-color": "#d9574f",
-              "target-arrow-color": "#d9574f",
-              "line-style": "dashed",
-              width: 3,
-            },
-          },
-        ],
+    if (!network) return;
+    let active = true;
+    void Promise.all([
+      api.globalShipments(),
+      api.globalOptimizations(),
+    ])
+      .then(([shipmentResponse, historyResponse]) => {
+        if (!active) return;
+        setShipments(shipmentResponse);
+        setShipmentId((current) => current || shipmentResponse[0]?.id || "");
+        setHistory(historyResponse.items);
+        setScenarioId((current) => current || network.scenarios[0]?.id || "");
+      })
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Unable to load synthetic global data.");
       });
-    });
     return () => {
-      canceled = true;
-      core.current?.destroy();
-      core.current = null;
+      active = false;
     };
-  }, [network, scenario]);
+  }, [network]);
+
+  useEffect(() => {
+    if (!network || !shipmentId || activeRun) return;
+    let active = true;
+    void api
+      .globalRoutes({
+        shipment_id: shipmentId,
+        scenario_id: scenarioId || null,
+        max_routes: 8,
+      })
+      .then((routes) => {
+        if (active) setRouteCandidates(routes);
+      })
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Unable to generate route candidates.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [network, shipmentId, scenarioId, activeRun]);
+
+  const result = activeRun?.result;
+  const selectedPlan = result
+    ? result.scenario_id
+      ? result.recovery
+      : result.baseline
+    : null;
+  const plannedRoute = selectedPlan?.routes[shipmentId];
+  const routes = plannedRoute
+    ? [plannedRoute, ...(selectedPlan?.alternatives[shipmentId] ?? [])]
+    : routeCandidates;
+  const selectedRoute = routes.find((route) => route.id === selectedRouteId) ?? routes[0] ?? null;
+  const scenario = network?.scenarios.find((item) => item.id === scenarioId);
+  const disruptedLinkIds = scenario
+    ? [...scenario.closed_link_ids, ...Object.keys(scenario.capacity_overrides)]
+    : [];
+  const shipment = shipments.find((item) => item.id === shipmentId) ?? null;
+  const baseRoute = result?.baseline.routes[shipmentId];
+  const recoveredRoute = result?.recovery?.routes[shipmentId];
+  const weightsTotal = Object.values(weights).reduce((sum, value) => sum + value, 0);
+  const chosenRouteIsPlanned = Boolean(
+    plannedRoute && selectedRoute && plannedRoute.id === selectedRoute.id,
+  );
+  const selectLocation = useCallback((location: NetworkResponse["nodes"][number]) => {
+    setSelectedLocation(location);
+  }, []);
+
+  useEffect(() => {
+    if (selectedRouteId && routes.some((route) => route.id === selectedRouteId)) return;
+    setSelectedRouteId(routes[0]?.id ?? null);
+  }, [routes, selectedRouteId]);
+
+  useEffect(() => {
+    if (!activeRun || !shipmentId || !chosenRouteIsPlanned || !selectedRoute) {
+      setMovement(null);
+      return;
+    }
+    let active = true;
+    void api
+      .shipmentPosition(activeRun.id, shipmentId, elapsedTime)
+      .then((value) => {
+        if (!active) return;
+        setMovement(value);
+        if (value.status === "delivered") setPlaying(false);
+      })
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Unable to calculate simulated position.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeRun, shipmentId, elapsedTime, chosenRouteIsPlanned, selectedRoute]);
+
+  useEffect(() => {
+    if (!playing) return;
+    const interval = window.setInterval(
+      () => setElapsedTime((value) => value + simulationSpeed),
+      1000,
+    );
+    return () => window.clearInterval(interval);
+  }, [playing, simulationSpeed]);
+
+  const createOptimization = async () => {
+    if (weightsTotal !== 100) return;
+    setLoading(true);
+    setError(null);
+    setMovement(null);
+    setElapsedTime(0);
+    setPlaying(false);
+    try {
+      const run = await api.createGlobalOptimization({
+        scenario_id: scenarioId || null,
+        weights,
+        max_routes: 8,
+      });
+      setActiveRun(run);
+      setHistory((items) => [run, ...items.filter((item) => item.id !== run.id)]);
+      const selected = scenarioId
+        ? run.result?.recovery?.routes[shipmentId]
+        : run.result?.baseline.routes[shipmentId];
+      setSelectedRouteId(selected?.id ?? null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The optimization request failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeScenario = (value: string) => {
+    setScenarioId(value);
+    setActiveRun(null);
+    setSelectedRouteId(null);
+    setMovement(null);
+    setElapsedTime(0);
+    setPlaying(false);
+  };
+
+  const updateWeight = (key: keyof typeof weights, value: number) => {
+    setWeights((current) => ({
+      ...current,
+      [key]: Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0,
+    }));
+  };
+
   if (!network)
     return (
       <EmptyState
-        title="Network unavailable"
-        detail="Connect to the QSupply API to load the validated synthetic network."
+        title="Global network unavailable"
+        detail="The API has not returned a validated geospatial demonstration network."
       />
     );
+
   return (
     <>
-      <PageHeader page="network" eyebrow="OPERATIONS / NETWORK MODEL" />
+      <PageHeader page="network" eyebrow="OPERATIONS / GLOBAL NETWORK" />
       <div className="network-topline">
         <div>
-          <Badge tone="warn">Synthetic network</Badge>
+          <Badge tone="warn">Synthetic demonstration data</Badge>
           <span className="network-units">
-            {network.quantity_unit} · {network.cost_unit} · {network.time_unit}{" "}
-            · {network.carbon_unit}
+            {network.quantity_unit} · {network.cost_unit} · {network.time_unit} · {network.carbon_unit}
           </span>
         </div>
         <label className="scenario-select">
           Scenario
           <select
+            aria-label="Network scenario"
             value={scenarioId}
-            onChange={(event) => setScenarioId(event.target.value)}
+            onChange={(event) => changeScenario(event.target.value)}
           >
             <option value="">Baseline network</option>
             {network.scenarios.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.id}
-              </option>
+              <option value={item.id} key={item.id}>{item.id}</option>
             ))}
           </select>
         </label>
       </div>
-      <Panel
-        title={network.name}
-        subtitle="Validated network data model · interactive directed links · no route calculation"
-      >
-        <div className="graph-legend">
-          <span>
-            <i className="legend-road" />
-            Road
-          </span>
-          <span>
-            <i className="legend-rail" />
-            Rail
-          </span>
-          <span>
-            <i className="legend-sea" />
-            Sea
-          </span>
-          <span>
-            <i className="legend-air" />
-            Air
-          </span>
-          {scenario && (
-            <span>
-              <i className="legend-closed" />
-              Unavailable under scenario
-            </span>
+
+      <div className="global-network-layout">
+        <Panel
+          title={network.name}
+          subtitle={`${network.nodes.length} geocoded locations · ${network.links.length} directed multimodal links`}
+          className="global-map-panel"
+        >
+          <div className="map-toolbar">
+            <div className="graph-legend">
+              {(["road", "rail", "sea", "air"] as const).map((mode) => (
+                <label key={mode} className="map-mode-filter">
+                  <input
+                    type="checkbox"
+                    checked={modeFilters.has(mode)}
+                    onChange={() => setModeFilters((current) => {
+                      const next = new Set(current);
+                      if (next.has(mode)) next.delete(mode);
+                      else next.add(mode);
+                      return next;
+                    })}
+                  />
+                  <i className={`legend-${mode}`} />
+                  {mode}
+                </label>
+              ))}
+              {scenario && <span><i className="legend-closed" />Constrained corridor</span>}
+            </div>
+          </div>
+          <GlobalNetworkMap
+            network={network}
+            routes={routes}
+            selectedRouteId={selectedRoute?.id ?? null}
+            disruptedLinkIds={disruptedLinkIds}
+            modeFilters={modeFilters}
+            movement={movement}
+            selectedLocation={selectedLocation}
+            onSelectLocation={selectLocation}
+          />
+          {selectedLocation && (
+            <div className="location-inspector">
+              <strong>{selectedLocation.label}</strong>
+              <span>{[selectedLocation.kind.replaceAll("_", " "), selectedLocation.country_name, selectedLocation.region].filter(Boolean).join(" · ")}</span>
+              <small>{selectedLocation.latitude?.toFixed(3)}, {selectedLocation.longitude?.toFixed(3)} · {selectedLocation.timezone ?? "time zone unavailable"}</small>
+            </div>
           )}
+          <div className="network-footnote">
+            All route attributes and positions are synthetic. No live vessel, aircraft, carrier, congestion, or tracking feed is connected. Base map © OpenStreetMap contributors.
+          </div>
+        </Panel>
+
+        <div className="global-network-side">
+          <Panel title="Recovery optimization" subtitle="Classical bounded route generation and capacity-aware assignment">
+            <div className="run-form global-run-form">
+              <label>
+                Shipment
+                <select value={shipmentId} onChange={(event) => { setShipmentId(event.target.value); setSelectedRouteId(null); }}>
+                  {shipments.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.origin_name} → {item.destination_name}</option>)}
+                </select>
+                {shipment && <small>{shipment.quantity} {shipment.quantity_unit} · {shipment.cargo_category} · priority {shipment.priority}</small>}
+              </label>
+              <div className="objective-weight-grid">
+                {(["cost", "delivery_time", "carbon", "resilience"] as const).map((key) => (
+                  <label key={key}>
+                    {key.replaceAll("_", " ")}
+                    <span className="weight-input-wrap">
+                      <input type="number" min={0} max={100} step={1} value={weights[key]} onChange={(event) => updateWeight(key, Number(event.target.value))} />
+                      <span>%</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <small className={weightsTotal === 100 ? "weight-total valid" : "weight-total invalid"}>
+                Objective weights: {weightsTotal}% {weightsTotal === 100 ? "· valid" : "· must total 100%"}
+              </small>
+              <button className="primary-button run-button" onClick={() => void createOptimization()} disabled={loading || weightsTotal !== 100 || shipments.length === 0}>
+                {loading ? "Running recovery optimization…" : "Run recovery optimization"}
+              </button>
+              {error && <div className="network-error" role="alert">{error}</div>}
+              {scenario && <div className="scenario-description">{scenario.description}</div>}
+            </div>
+          </Panel>
+
+          <Panel title="Route plan" subtitle={result ? `Run ${activeRun?.id.slice(0, 8)} · ${result.algorithm}` : "Generate route options or run recovery optimization"}>
+            {result && (
+              <div className="recovery-status">
+                <Badge tone={result.recovery_feasible ? "good" : "bad"}>
+                  {result.recovery_feasible ? "Recovery feasible" : "Recovery infeasible"}
+                </Badge>
+                <span>{result.optimality_scope}</span>
+              </div>
+            )}
+            {selectedRoute && (
+              <label className="route-choice">
+                Display route
+                <select aria-label="Displayed route" value={selectedRoute.id} onChange={(event) => setSelectedRouteId(event.target.value)}>
+                  {routes.map((route, index) => (
+                    <option value={route.id} key={route.id}>{index === 0 && plannedRoute?.id === route.id ? "Selected plan" : `Alternative ${index + 1}`} · {route.modes.join(" / ")} · {formatNumber(route.transit_time)} days</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {baseRoute && (
+              <div className="route-comparison-grid">
+                <div><small>Baseline</small><strong>{formatNumber(baseRoute.freight_cost, 1)} {network.cost_unit}</strong><span>{formatNumber(baseRoute.transit_time)} days · {formatNumber(baseRoute.carbon_kg)} kgCO₂e</span></div>
+                <div><small>Recovery</small><strong>{recoveredRoute ? `${formatNumber(recoveredRoute.freight_cost, 1)} ${network.cost_unit}` : "No feasible route"}</strong><span>{recoveredRoute ? `${formatNumber(recoveredRoute.transit_time)} days · ${formatNumber(recoveredRoute.carbon_kg)} kgCO₂e` : "No recovered assignment"}</span></div>
+              </div>
+            )}
+            {result?.baseline.metrics && (
+              <div className="plan-metrics-list">
+                <div><span>Freight cost</span><strong>{formatNumber(result.baseline.metrics.total_cost, 1)} → {formatNumber(result.recovery?.metrics.total_cost, 1)} {network.cost_unit}</strong></div>
+                <div><span>Delivery time</span><strong>{formatNumber(result.baseline.metrics.delivery_time)} → {formatNumber(result.recovery?.metrics.delivery_time)} {network.time_unit}</strong></div>
+                <div><span>Carbon</span><strong>{formatNumber(result.baseline.metrics.carbon_kg)} → {formatNumber(result.recovery?.metrics.carbon_kg)} {network.carbon_unit}</strong></div>
+                <div><span>Resilience exposure</span><strong>{formatNumber(result.baseline.metrics.resilience_exposure)} → {formatNumber(result.recovery?.metrics.resilience_exposure)}</strong></div>
+                <div><span>Delay penalties</span><strong>{formatNumber(result.baseline.metrics.delay_penalty, 1)} → {formatNumber(result.recovery?.metrics.delay_penalty, 1)} {network.cost_unit}</strong></div>
+              </div>
+            )}
+            {result?.failure_reason && <div className="network-error">{result.failure_reason}</div>}
+            {selectedRoute && (
+              <ol className="selected-route-legs">
+                {selectedRoute.legs.map((leg) => (
+                  <li key={leg.link_id}><span className={`mode-tag mode-${leg.mode}`}>{leg.mode}</span><span>{network.nodes.find((node) => node.id === leg.origin_id)?.label} → {network.nodes.find((node) => node.id === leg.destination_id)?.label}</span><small>{formatNumber(leg.distance_km)} km · {formatNumber(leg.transit_time)} days</small></li>
+                ))}
+              </ol>
+            )}
+            {!selectedRoute && !loading && <EmptyState title="No route option" detail="Choose a supported sample shipment or a less restrictive scenario." />}
+          </Panel>
+
+          <Panel title="Shipment movement · simulated" subtitle="Deterministic playback follows selected route geometry">
+            {activeRun && plannedRoute && chosenRouteIsPlanned ? (
+              <div className="movement-controls">
+                <div className="movement-buttons">
+                  <button className="primary-button" onClick={() => setPlaying((value) => !value)}>{playing ? "Pause" : "Play"}</button>
+                  <button className="secondary-button" onClick={() => { setElapsedTime(0); setPlaying(false); }}>Reset</button>
+                  <label>Speed<select aria-label="Simulation speed" value={simulationSpeed} onChange={(event) => setSimulationSpeed(Number(event.target.value))}><option value={0.25}>0.25 day/sec</option><option value={1}>1 day/sec</option><option value={3}>3 days/sec</option></select></label>
+                </div>
+                <input aria-label="Simulation timeline" type="range" min={0} max={Math.max(1, plannedRoute.transit_time)} step={0.1} value={Math.min(elapsedTime, plannedRoute.transit_time)} onChange={(event) => { setElapsedTime(Number(event.target.value)); setPlaying(false); }} />
+                <div className="movement-readout">
+                  <Badge tone={movement?.status === "delivered" ? "good" : "blue"}>{movement?.status?.replaceAll("_", " ") ?? "Loading position"}</Badge>
+                  <span>{movement?.current_mode ?? "—"} · {formatNumber(movement?.remaining_time)} {network.time_unit} remaining</span>
+                  <small>Estimated arrival {movement ? new Date(movement.estimated_arrival).toLocaleString() : "—"}</small>
+                </div>
+              </div>
+            ) : (
+              <EmptyState title="Run recovery to simulate movement" detail="Playback is available for the route actually selected by a completed optimization." />
+            )}
+            <div className="network-footnote">Shipment positions are simulated from fixed departure inputs. No live GPS, AIS, or carrier tracking integration is connected.</div>
+          </Panel>
         </div>
-        <div
-          className="cytoscape-frame"
-          ref={container}
-          aria-label="Interactive synthetic multimodal transportation network"
-        />
-        <div className="network-footnote">
-          <strong>Model view only.</strong> Link capacities, costs, times and
-          carbon values are synthetic. The corridor disruption is displayed as
-          an input overlay; no shipment assignment, capacity recalculation or
-          recovery plan is computed.
-        </div>
-      </Panel>
-      <Panel
-        title="Network links"
-        subtitle={`${network.links.length} directed links · capacity by ${network.quantity_unit}`}
-      >
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Connection</th>
-                <th>Mode</th>
-                <th>Capacity</th>
-                <th>Transit time</th>
-                <th>Cost / unit</th>
-                <th>Carbon / unit</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {network.links.map((link) => {
-                const closed =
-                  scenario?.closed_link_ids.includes(link.id) ?? false;
-                const capacity =
-                  scenario?.capacity_overrides[link.id] ?? link.capacity;
-                return (
-                  <tr key={link.id}>
-                    <td>
-                      {
-                        network.nodes.find((node) => node.id === link.source)
-                          ?.label
-                      }{" "}
-                      →{" "}
-                      {
-                        network.nodes.find((node) => node.id === link.target)
-                          ?.label
-                      }
-                    </td>
-                    <td>
-                      <span className={`mode-tag mode-${link.mode}`}>
-                        {link.mode}
-                      </span>
-                    </td>
-                    <td>
-                      {capacity ?? "—"} {link.capacity_unit}
-                    </td>
-                    <td>
-                      {formatNumber(link.transit_time)} {network.time_unit}
-                    </td>
-                    <td>
-                      {formatNumber(link.variable_cost_per_quantity_unit, 2)}{" "}
-                      {network.cost_unit}
-                    </td>
-                    <td>
-                      {formatNumber(link.carbon_per_quantity_unit, 2)}{" "}
-                      {network.carbon_unit}
-                    </td>
-                    <td>
-                      {closed ? (
-                        <Badge tone="bad">Disrupted</Badge>
-                      ) : (
-                        <Badge tone="good">Available</Badge>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      </div>
+
+      <Panel title="Recent global optimization runs" subtitle="Persisted locally through the configured SQLite or PostgreSQL run store">
+        {history.length ? (
+          <div className="table-scroll"><table><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Status</th><th>Recovery</th><th>Cost</th></tr></thead><tbody>
+            {history.map((run) => <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{run.scenario_id ?? "Baseline"}</td><td><Badge tone={run.status === "completed" ? "good" : "bad"}>{run.status}</Badge></td><td>{run.result ? run.result.recovery_feasible ? "Feasible" : "Infeasible" : "—"}</td><td>{run.result ? `${formatNumber(run.result.recovery?.metrics.total_cost, 1)} ${network.cost_unit}` : "—"}</td></tr>)}
+          </tbody></table></div>
+        ) : <EmptyState title="No global optimization runs" detail="Run the recovery workspace to create the first persisted result." />}
       </Panel>
     </>
   );
@@ -1405,7 +1478,7 @@ export default function App() {
           api.capabilities(),
           api.instances(),
           api.runs(),
-          api.network(),
+          api.globalNetwork(),
         ]);
       setCapabilities(capabilityData);
       setInstances(instanceData);

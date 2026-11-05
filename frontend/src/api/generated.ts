@@ -72,6 +72,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/global/network": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Network */
+        get: operations["global_network_api_v1_global_network_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/shipments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Shipments */
+        get: operations["global_shipments_api_v1_global_shipments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/shipments/{shipment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Shipment */
+        get: operations["global_shipment_api_v1_global_shipments__shipment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Scenarios */
+        get: operations["global_scenarios_api_v1_global_scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Global Routes */
+        post: operations["global_routes_api_v1_global_routes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/optimizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Global Optimizations */
+        get: operations["list_global_optimizations_api_v1_global_optimizations_get"];
+        put?: never;
+        /** Create Global Optimization */
+        post: operations["create_global_optimization_api_v1_global_optimizations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/optimizations/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Global Optimization */
+        get: operations["get_global_optimization_api_v1_global_optimizations__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/optimizations/{run_id}/shipments/{shipment_id}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Shipment Position */
+        get: operations["shipment_position_api_v1_global_optimizations__run_id__shipments__shipment_id__position_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs": {
         parameters: {
             query?: never;
@@ -114,6 +251,40 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CandidateRouteResponse */
+        CandidateRouteResponse: {
+            /** Id */
+            id: string;
+            /** Shipment Id */
+            shipment_id: string;
+            /** Location Ids */
+            location_ids: string[];
+            /** Link Ids */
+            link_ids: string[];
+            /** Legs */
+            legs: components["schemas"]["RouteLegResponse"][];
+            /** Modes */
+            modes: string[];
+            /** Distance Km */
+            distance_km: number;
+            /** Transit Time */
+            transit_time: number;
+            /** Freight Cost */
+            freight_cost: number;
+            /** Carbon Kg */
+            carbon_kg: number;
+            /** Resilience Exposure */
+            resilience_exposure: number;
+            /** Transfer Count */
+            transfer_count: number;
+            /** Bottleneck Capacity */
+            bottleneck_capacity: number | null;
+            /** Geometry */
+            geometry: [
+                number,
+                number
+            ][];
+        };
         /** CapabilitiesResponse */
         CapabilitiesResponse: {
             /** Solvers */
@@ -133,6 +304,120 @@ export interface components {
             status: string;
             /** Description */
             description: string;
+        };
+        /** GlobalOptimizationListResponse */
+        GlobalOptimizationListResponse: {
+            /** Items */
+            items: components["schemas"]["GlobalOptimizationRecord"][];
+        };
+        /** GlobalOptimizationRecord */
+        GlobalOptimizationRecord: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Scenario Id */
+            scenario_id: string | null;
+            weights: components["schemas"]["ObjectiveWeightsInput"];
+            result?: components["schemas"]["GlobalOptimizationResult"] | null;
+            /** Error */
+            error?: string | null;
+        };
+        /** GlobalOptimizationRequest */
+        GlobalOptimizationRequest: {
+            /**
+             * Scenario Id
+             * @default synthetic-suez-capacity-restriction
+             */
+            scenario_id: string | null;
+            weights?: components["schemas"]["ObjectiveWeightsInput"];
+            /**
+             * Max Routes
+             * @default 8
+             */
+            max_routes: number;
+        };
+        /** GlobalOptimizationResult */
+        GlobalOptimizationResult: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /**
+             * Synthetic
+             * @default true
+             */
+            synthetic: boolean;
+            /** Scenario Id */
+            scenario_id: string | null;
+            weights: components["schemas"]["ObjectiveWeightsInput"];
+            normalization_references: components["schemas"]["ObjectiveReferencesResponse"];
+            /** Recovery Feasible */
+            recovery_feasible: boolean;
+            /** Failure Reason */
+            failure_reason: string | null;
+            baseline: components["schemas"]["RouteAssignmentResponse"];
+            recovery: components["schemas"]["RouteAssignmentResponse"] | null;
+            /** Algorithm */
+            algorithm: string;
+            /** Optimality Scope */
+            optimality_scope: string;
+        };
+        /** GlobalRoutesRequest */
+        GlobalRoutesRequest: {
+            /** Shipment Id */
+            shipment_id: string;
+            /** Scenario Id */
+            scenario_id?: string | null;
+            /**
+             * Max Routes
+             * @default 8
+             */
+            max_routes: number;
+        };
+        /** GlobalShipment */
+        GlobalShipment: {
+            /** Id */
+            id: string;
+            /** Origin Id */
+            origin_id: string;
+            /** Origin Name */
+            origin_name: string;
+            /** Destination Id */
+            destination_id: string;
+            /** Destination Name */
+            destination_name: string;
+            /** Quantity */
+            quantity: number;
+            /** Quantity Unit */
+            quantity_unit: string;
+            /** Cargo Category */
+            cargo_category: string;
+            /** Priority */
+            priority: number;
+            /** Deadline */
+            deadline: number;
+            /** Deadline Unit */
+            deadline_unit: string;
+            /** Delay Penalty Per Day */
+            delay_penalty_per_day: number;
+            /** Maximum Transit Time */
+            maximum_transit_time: number;
+            /**
+             * Departure Time
+             * Format: date-time
+             */
+            departure_time: string;
+            /**
+             * Synthetic
+             * @default true
+             */
+            synthetic: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -190,6 +475,18 @@ export interface components {
             available: boolean;
             /** Capabilities */
             capabilities: string[];
+            /** Distance Km */
+            distance_km?: number | null;
+            /** Geometry */
+            geometry?: [
+                number,
+                number
+            ][];
+            /**
+             * Resilience Exposure
+             * @default 0
+             */
+            resilience_exposure: number;
         };
         /** NetworkNode */
         NetworkNode: {
@@ -201,6 +498,18 @@ export interface components {
             kind: string;
             /** Country Code */
             country_code: string | null;
+            /** Country Name */
+            country_name?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Transfer Modes */
+            transfer_modes?: string[];
         };
         /** NetworkResponse */
         NetworkResponse: {
@@ -255,6 +564,105 @@ export interface components {
             transit_time_multipliers: {
                 [key: string]: number;
             };
+        };
+        /** ObjectiveReferencesResponse */
+        ObjectiveReferencesResponse: {
+            /** Cost */
+            cost: number;
+            /** Delivery Time */
+            delivery_time: number;
+            /** Carbon */
+            carbon: number;
+            /** Resilience */
+            resilience: number;
+        };
+        /** ObjectiveWeightsInput */
+        ObjectiveWeightsInput: {
+            /**
+             * Cost
+             * @default 40
+             */
+            cost: number;
+            /**
+             * Delivery Time
+             * @default 25
+             */
+            delivery_time: number;
+            /**
+             * Carbon
+             * @default 20
+             */
+            carbon: number;
+            /**
+             * Resilience
+             * @default 15
+             */
+            resilience: number;
+        };
+        /** PlanMetricsResponse */
+        PlanMetricsResponse: {
+            /** Freight Cost */
+            freight_cost: number;
+            /** Delay Penalty */
+            delay_penalty: number;
+            /** Total Cost */
+            total_cost: number;
+            /** Delivery Time */
+            delivery_time: number;
+            /** Carbon Kg */
+            carbon_kg: number;
+            /** Resilience Exposure */
+            resilience_exposure: number;
+            /** Weighted Objective */
+            weighted_objective: number;
+        };
+        /** RouteAssignmentResponse */
+        RouteAssignmentResponse: {
+            /** Routes */
+            routes: {
+                [key: string]: components["schemas"]["CandidateRouteResponse"];
+            };
+            /** Alternatives */
+            alternatives: {
+                [key: string]: components["schemas"]["CandidateRouteResponse"][];
+            };
+            metrics: components["schemas"]["PlanMetricsResponse"];
+            /** Capacity Usage */
+            capacity_usage: {
+                [key: string]: number;
+            };
+            /** Capacity Utilization */
+            capacity_utilization: {
+                [key: string]: number;
+            };
+            /** Method */
+            method: string;
+        };
+        /** RouteLegResponse */
+        RouteLegResponse: {
+            /** Link Id */
+            link_id: string;
+            /** Origin Id */
+            origin_id: string;
+            /** Destination Id */
+            destination_id: string;
+            /** Mode */
+            mode: string;
+            /** Distance Km */
+            distance_km: number;
+            /** Transit Time */
+            transit_time: number;
+            /** Freight Cost */
+            freight_cost: number;
+            /** Carbon Kg */
+            carbon_kg: number;
+            /** Capacity */
+            capacity: number | null;
+            /** Geometry */
+            geometry: [
+                number,
+                number
+            ][];
         };
         /** RunCreateRequest */
         RunCreateRequest: {
@@ -331,6 +739,38 @@ export interface components {
             exact_reference_elapsed_seconds?: number | null;
             /** Optimality Gap Percent */
             optimality_gap_percent?: number | null;
+        };
+        /** ShipmentPositionResponse */
+        ShipmentPositionResponse: {
+            /** Shipment Id */
+            shipment_id: string;
+            /** Status */
+            status: string;
+            /** Position */
+            position: [
+                number,
+                number
+            ];
+            /** Current Leg Id */
+            current_leg_id: string | null;
+            /** Current Mode */
+            current_mode: string | null;
+            /** Elapsed Time */
+            elapsed_time: number;
+            /** Remaining Time */
+            remaining_time: number;
+            /**
+             * Departure Time
+             * Format: date-time
+             */
+            departure_time: string;
+            /**
+             * Estimated Arrival
+             * Format: date-time
+             */
+            estimated_arrival: string;
+            /** Time Unit */
+            time_unit: string;
         };
         /** SolverCapability */
         SolverCapability: {
@@ -450,6 +890,259 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NetworkResponse"];
+                };
+            };
+        };
+    };
+    global_network_api_v1_global_network_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkResponse"];
+                };
+            };
+        };
+    };
+    global_shipments_api_v1_global_shipments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalShipment"][];
+                };
+            };
+        };
+    };
+    global_shipment_api_v1_global_shipments__shipment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalShipment"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    global_scenarios_api_v1_global_scenarios_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkScenario"][];
+                };
+            };
+        };
+    };
+    global_routes_api_v1_global_routes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlobalRoutesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateRouteResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_global_optimizations_api_v1_global_optimizations_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalOptimizationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_global_optimization_api_v1_global_optimizations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlobalOptimizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalOptimizationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_global_optimization_api_v1_global_optimizations__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalOptimizationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shipment_position_api_v1_global_optimizations__run_id__shipments__shipment_id__position_get: {
+        parameters: {
+            query?: {
+                elapsed_time?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                shipment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentPositionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

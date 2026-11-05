@@ -7,18 +7,36 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from qsupply import MAX_EXACT_CUSTOMERS
+from qsupply.network.global_demo import global_demo_shipments
+from qsupply.network.planning import RecoverySearchLimitError
 
+from .global_service import (
+    generate_shipment_routes,
+    get_shipment_profile,
+    global_network_response,
+    movement_for_result,
+    run_global_optimization,
+    shipment_response,
+)
 from .instances import get_cvrp_instance, list_cvrp_instances, synthetic_network_response
 from .run_service import execute_run
 from .schemas import (
     CapabilitiesResponse,
+    CandidateRouteResponse,
     CapabilityStatus,
     HealthResponse,
+    GlobalOptimizationListResponse,
+    GlobalOptimizationRecord,
+    GlobalOptimizationRequest,
+    GlobalRoutesRequest,
+    GlobalShipment,
     InstanceSummary,
+    NetworkScenario,
     NetworkResponse,
     RunCreateRequest,
     RunListResponse,
     RunRecord,
+    ShipmentPositionResponse,
     SolverCapability,
     SolverId,
 )
@@ -94,6 +112,129 @@ def create_app(
     @app.get("/api/v1/networks/demo", response_model=NetworkResponse, tags=["network"])
     def demo_network() -> NetworkResponse:
         return synthetic_network_response()
+
+    @app.get("/api/v1/global/network", response_model=NetworkResponse, tags=["global-network"])
+    def global_network() -> NetworkResponse:
+        return global_network_response()
+
+    @app.get("/api/v1/global/shipments", response_model=list[GlobalShipment], tags=["global-network"])
+    def global_shipments() -> list[GlobalShipment]:
+        return [shipment_response(profile) for profile in global_demo_shipments()]
+
+    @app.get(
+        "/api/v1/global/shipments/{shipment_id}",
+        response_model=GlobalShipment,
+        tags=["global-network"],
+    )
+    def global_shipment(shipment_id: str) -> GlobalShipment:
+        profile = get_shipment_profile(shipment_id)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Shipment was not found")
+        return shipment_response(profile)
+
+    @app.get(
+        "/api/v1/global/scenarios",
+        response_model=list[NetworkScenario],
+        tags=["global-network"],
+    )
+    def global_scenarios() -> list[NetworkScenario]:
+        return global_network_response().scenarios
+
+    @app.post(
+        "/api/v1/global/routes",
+        response_model=list[CandidateRouteResponse],
+        tags=["global-network"],
+    )
+    def global_routes(request: GlobalRoutesRequest) -> list[CandidateRouteResponse]:
+        try:
+            return generate_shipment_routes(
+                request.shipment_id, request.scenario_id, request.max_routes
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Shipment or scenario was not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post(
+        "/api/v1/global/optimizations",
+        response_model=GlobalOptimizationRecord,
+        status_code=201,
+        tags=["global-optimization"],
+    )
+    def create_global_optimization(
+        request: GlobalOptimizationRequest,
+    ) -> GlobalOptimizationRecord:
+        run_id = str(uuid4())
+        weights = request.weights.model_dump()
+        app.state.run_store.create_global_optimization(
+            run_id, request.scenario_id, weights
+        )
+        try:
+            result = run_global_optimization(
+                run_id, request.scenario_id, weights, request.max_routes
+            )
+            app.state.run_store.complete_global_optimization(run_id, result)
+        except KeyError as error:
+            app.state.run_store.fail_global_optimization(run_id, "Unknown disruption scenario")
+            raise HTTPException(status_code=404, detail="Disruption scenario was not found") from error
+        except (ValueError, RecoverySearchLimitError) as error:
+            app.state.run_store.fail_global_optimization(run_id, str(error))
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except Exception as error:
+            app.state.run_store.fail_global_optimization(run_id, type(error).__name__)
+            raise HTTPException(status_code=500, detail="Global optimization failed") from error
+        record = app.state.run_store.get_global_optimization(run_id)
+        assert record is not None
+        return GlobalOptimizationRecord.model_validate(record)
+
+    @app.get(
+        "/api/v1/global/optimizations",
+        response_model=GlobalOptimizationListResponse,
+        tags=["global-optimization"],
+    )
+    def list_global_optimizations(
+        limit: int = Query(default=50, ge=1, le=200),
+    ) -> GlobalOptimizationListResponse:
+        return GlobalOptimizationListResponse(
+            items=[
+                GlobalOptimizationRecord.model_validate(item)
+                for item in app.state.run_store.list_global_optimizations(limit)
+            ]
+        )
+
+    @app.get(
+        "/api/v1/global/optimizations/{run_id}",
+        response_model=GlobalOptimizationRecord,
+        tags=["global-optimization"],
+    )
+    def get_global_optimization(run_id: str) -> GlobalOptimizationRecord:
+        record = app.state.run_store.get_global_optimization(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Optimization run was not found")
+        return GlobalOptimizationRecord.model_validate(record)
+
+    @app.get(
+        "/api/v1/global/optimizations/{run_id}/shipments/{shipment_id}/position",
+        response_model=ShipmentPositionResponse,
+        tags=["global-optimization"],
+    )
+    def shipment_position(
+        run_id: str,
+        shipment_id: str,
+        elapsed_time: float = Query(default=0, ge=0),
+    ) -> ShipmentPositionResponse:
+        record = app.state.run_store.get_global_optimization(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Optimization run was not found")
+        if record["status"] != "completed" or record["result"] is None:
+            raise HTTPException(status_code=409, detail="Optimization result is not complete")
+        try:
+            position = movement_for_result(record["result"], shipment_id, elapsed_time)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Shipment was not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return ShipmentPositionResponse.model_validate(position)
 
     @app.get("/api/v1/runs", response_model=RunListResponse, tags=["runs"])
     def list_runs(limit: int = Query(default=100, ge=1, le=500)) -> RunListResponse:

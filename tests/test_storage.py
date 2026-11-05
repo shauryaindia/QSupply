@@ -143,8 +143,40 @@ class TestSQLiteRunStore(unittest.TestCase):
                 "SELECT request_json FROM optimization_runs WHERE id = ?",
                 ("legacy-run",),
             ).fetchone()["request_json"]
-        self.assertEqual(versions, {1, 2})
+        self.assertEqual(versions, {1, 2, 3})
         self.assertEqual(json.loads(request_json), {})
+
+    def test_global_optimization_results_persist_across_store_restarts(self):
+        weights = {"cost": 40, "delivery_time": 25, "carbon": 20, "resilience": 15}
+        self.store.create_global_optimization(
+            "global-run-1", "synthetic-suez-capacity-restriction", weights
+        )
+        result = {
+            "id": "global-run-1",
+            "status": "completed",
+            "synthetic": True,
+            "scenario_id": "synthetic-suez-capacity-restriction",
+        }
+        self.store.complete_global_optimization("global-run-1", result)
+
+        restarted = SQLiteRunStore(self.database)
+        record = restarted.get_global_optimization("global-run-1")
+        self.assertEqual(record["status"], "completed")
+        self.assertEqual(record["weights"], weights)
+        self.assertEqual(record["result"], result)
+        self.assertEqual(
+            [item["id"] for item in restarted.list_global_optimizations()],
+            ["global-run-1"],
+        )
+
+    def test_global_optimization_status_transitions_are_guarded(self):
+        self.store.create_global_optimization("global-failed", None, {"cost": 100})
+        self.store.fail_global_optimization("global-failed", "forced failure")
+        with self.assertRaisesRegex(RuntimeError, "no longer running"):
+            self.store.complete_global_optimization("global-failed", {"status": "completed"})
+        record = self.store.get_global_optimization("global-failed")
+        self.assertEqual(record["status"], "failed")
+        self.assertEqual(record["error"], "forced failure")
 
     def test_concurrent_run_writes_remain_readable(self):
         def create_and_finish(index: int) -> str:

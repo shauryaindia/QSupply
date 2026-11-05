@@ -8,7 +8,11 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
-import { api, type RunRecord } from "./api/client";
+import { api, type GlobalOptimization, type RunRecord } from "./api/client";
+
+vi.mock("./GlobalNetworkMap", () => ({
+  default: () => <div data-testid="global-map" />,
+}));
 
 vi.mock("./api/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("./api/client")>();
@@ -19,6 +23,14 @@ vi.mock("./api/client", async (importOriginal) => {
       capabilities: vi.fn(),
       instances: vi.fn(),
       network: vi.fn(),
+      globalNetwork: vi.fn(),
+      globalShipments: vi.fn(),
+      globalScenarios: vi.fn(),
+      globalRoutes: vi.fn(),
+      globalOptimizations: vi.fn(),
+      globalOptimization: vi.fn(),
+      createGlobalOptimization: vi.fn(),
+      shipmentPosition: vi.fn(),
       runs: vi.fn(),
       run: vi.fn(),
       createRun: vi.fn(),
@@ -108,6 +120,39 @@ beforeEach(() => {
     links: [],
     scenarios: [],
   });
+  vi.mocked(api.globalNetwork).mockResolvedValue({
+    id: "synthetic-global-network-v1",
+    name: "Synthetic Global Network",
+    synthetic: true,
+    quantity_unit: "load_unit",
+    cost_unit: "synthetic_cost_unit",
+    time_unit: "day",
+    carbon_unit: "kgCO2e",
+    nodes: [],
+    links: [],
+    scenarios: [
+      {
+        id: "synthetic-suez-capacity-restriction",
+        description: "Synthetic corridor capacity scenario.",
+        synthetic: true,
+        closed_link_ids: [],
+        unavailable_location_ids: [],
+        capacity_overrides: { "sea-jebel-rotterdam": 3 },
+        cost_multipliers: {},
+        transit_time_multipliers: {},
+      },
+    ],
+  });
+  vi.mocked(api.globalShipments).mockResolvedValue([]);
+  vi.mocked(api.globalScenarios).mockResolvedValue([]);
+  vi.mocked(api.globalRoutes).mockResolvedValue([]);
+  vi.mocked(api.globalOptimizations).mockResolvedValue({ items: [] });
+  vi.mocked(api.createGlobalOptimization).mockRejectedValue(
+    new Error("No global optimization fixture configured"),
+  );
+  vi.mocked(api.shipmentPosition).mockRejectedValue(
+    new Error("No shipment position fixture configured"),
+  );
   vi.mocked(api.runs).mockResolvedValue({ items: [] });
 });
 
@@ -237,5 +282,98 @@ describe("QSupply dashboard interactions", () => {
     expect(
       screen.getByRole("checkbox", { name: /Compare with exact reference/ }),
     ).toBeDisabled();
+  });
+
+  it("submits the configured synthetic recovery optimization to the API", async () => {
+    const user = userEvent.setup();
+    const scenarioId = "synthetic-suez-capacity-restriction";
+    const route = {
+      id: "route-shanghai-rotterdam",
+      shipment_id: "EXP-104",
+      location_ids: ["shanghai", "jebel-ali", "rotterdam"],
+      link_ids: ["sea-shanghai-jebel", "sea-jebel-rotterdam"],
+      legs: [],
+      modes: ["sea"],
+      distance_km: 10000,
+      transit_time: 20,
+      freight_cost: 213,
+      carbon_kg: 10,
+      resilience_exposure: 0.69,
+      transfer_count: 0,
+      bottleneck_capacity: 3,
+      geometry: [[31.2, 121.5], [25.2, 55.3], [51.9, 4.5]] as [number, number][],
+    };
+    const assignment = {
+      routes: { "EXP-104": route, "EXP-205": route },
+      alternatives: { "EXP-104": [], "EXP-205": [] },
+      metrics: {
+        freight_cost: 426,
+        delay_penalty: 0,
+        total_cost: 426,
+        delivery_time: 34.3,
+        carbon_kg: 20,
+        resilience_exposure: 1.38,
+        weighted_objective: 0.51,
+      },
+      capacity_usage: { "sea-jebel-rotterdam": 2 },
+      capacity_utilization: { "sea-jebel-rotterdam": 0.66 },
+      method: "exact-enumeration-over-generated-candidates",
+    };
+    const optimization = {
+      id: "global-run-123",
+      status: "completed",
+      created_at: "2026-11-06T00:00:00Z",
+      scenario_id: scenarioId,
+      weights: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
+      result: {
+        id: "global-run-123",
+        status: "completed",
+        synthetic: true,
+        scenario_id: scenarioId,
+        weights: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
+        normalization_references: { cost: 500, delivery_time: 50, carbon: 30, resilience: 2 },
+        recovery_feasible: true,
+        failure_reason: null,
+        baseline: assignment,
+        recovery: assignment,
+        algorithm: "bounded candidate route enumeration",
+        optimality_scope: "Exact over generated candidate routes only",
+      },
+    } as unknown as GlobalOptimization;
+    const shipment = {
+      id: "EXP-104",
+      origin_id: "shanghai",
+      origin_name: "Shanghai",
+      destination_id: "rotterdam",
+      destination_name: "Rotterdam",
+      quantity: 2,
+      quantity_unit: "load_unit",
+      cargo_category: "electronics",
+      priority: 5,
+      deadline: 25,
+      deadline_unit: "day",
+      delay_penalty_per_day: 20,
+      maximum_transit_time: 35,
+      departure_time: "2026-01-01T00:00:00Z",
+      synthetic: true,
+    };
+    vi.mocked(api.globalShipments).mockResolvedValue([shipment]);
+    vi.mocked(api.createGlobalOptimization).mockResolvedValue(optimization);
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: /Network explorer/ }),
+    );
+    await screen.findByTestId("global-map");
+    await screen.findByRole("option", { name: /EXP-104/ });
+    await user.click(screen.getByRole("button", { name: "Run recovery optimization" }));
+    expect(api.createGlobalOptimization).toHaveBeenCalledWith({
+      scenario_id: scenarioId,
+      weights: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
+      max_routes: 8,
+    });
+    expect(await screen.findByText("Recovery feasible")).toBeInTheDocument();
+    expect(screen.getByText("Shipment movement · simulated")).toBeInTheDocument();
   });
 });

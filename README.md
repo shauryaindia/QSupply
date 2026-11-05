@@ -190,12 +190,13 @@ performance claims.
 
 ### Local dashboard and API
 
-The optional FastAPI adapter exposes the existing CVRP engine and stores run
-history in SQLite at `~/.qsupply/runs.sqlite3`. The React + TypeScript dashboard
-connects to that API; its CVRP instances and multimodal network explorer are
-clearly labelled synthetic. It does not show fabricated cost, delivery-time,
-carbon or utilization KPIs. See [`docs/web-api.md`](docs/web-api.md) for API
-details and limitations.
+The optional FastAPI adapter exposes the CVRP engine and a small global
+multimodal demonstration. The global workspace uses a deterministic synthetic
+network and shipment set to generate bounded candidate routes, compare a
+baseline assignment with a simulated corridor disruption, and report recovery
+feasibility and business metrics. It is not a live logistics feed or a general
+global route optimizer. See [`docs/global-network.md`](docs/global-network.md)
+and [`docs/web-api.md`](docs/web-api.md) for assumptions, APIs and limitations.
 
 To start the application from the repository root, use two terminals:
 
