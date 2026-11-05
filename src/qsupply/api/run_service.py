@@ -10,7 +10,7 @@ from qsupply import (
 
 from .instances import get_cvrp_instance
 from .schemas import RunResult, SolverId
-from .storage import SQLiteRunStore
+from .storage import RunStore
 
 
 def _distance_value(value: Any) -> float:
@@ -24,7 +24,7 @@ def _gap_percent(method_distance: Any, exact_distance: Any) -> float | None:
 
 
 def execute_run(
-    store: SQLiteRunStore,
+    store: RunStore,
     run_id: str,
     instance_id: str,
     solver_id: SolverId,

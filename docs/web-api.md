@@ -27,14 +27,38 @@ The OpenAPI document is served at `http://127.0.0.1:8000/openapi.json`.
   routes.
 - `POST /api/v1/runs` queues a real QSupply nearest-neighbour,
   nearest-neighbour + 2-opt, or exact CVRP solver run.
-- `GET /api/v1/runs` and `GET /api/v1/runs/{id}` return SQLite-backed run
+- `GET /api/v1/runs` and `GET /api/v1/runs/{id}` return persistent run
   history and results.
 
 The exact solver and exact comparison are limited to 10 customers. Results are
 validated against the source CVRP problem before persistence. Run timing covers
 the selected solver; optional exact-reference timing is reported separately.
-The local SQLite database defaults to `~/.qsupply/runs.sqlite3`; set
-`QSUPPLY_RUNS_DB` to choose another path.
+If `DATABASE_URL` is set, the API uses PostgreSQL through Psycopg. Render's
+`postgres://` URL scheme is normalized internally to `postgresql://`. When
+`DATABASE_URL` is absent, local development uses SQLite at
+`~/.qsupply/runs.sqlite3`; set `QSUPPLY_RUNS_DB` to choose another path.
+
+Schema changes are applied transactionally at first store use and tracked in
+`schema_migrations`. Version 1 creates the original run-history schema;
+version 2 adds a private request-input JSON column. Existing SQLite rows are
+preserved and receive an empty request payload during migration. Future
+database changes should add a new numbered migration rather than editing
+applied versions. Selecting PostgreSQL does not copy historical rows from a
+previous SQLite file; export/import that history separately before a production
+cutover if those records must remain available.
+
+For Render, install `requirements-web.txt` and set `DATABASE_URL` on the
+backend service to the database's internal connection URL. Keep that value in
+Render's environment configuration; do not commit it or print it. Since both
+services are in Oregon, the internal URL uses Render's private network. The
+application opens and closes one connection per database operation; this keeps
+transactions isolated and avoids cross-thread connection sharing. A pooled
+connection strategy may be appropriate if API traffic grows.
+
+The optional `QSUPPLY_TEST_POSTGRES_URL` enables real PostgreSQL integration
+tests. Tests never use `DATABASE_URL` as a test target. Without that explicit
+test variable, PostgreSQL integration coverage is skipped; SQLite migration,
+transaction and concurrency behavior still runs in the test suite.
 
 Install `requirements-web-test.txt` to run the API integration tests. This adds
 the optional API test dependencies without making them runtime requirements of

@@ -22,16 +22,20 @@ from .schemas import (
     SolverCapability,
     SolverId,
 )
-from .storage import SQLiteRunStore
+from .storage import create_run_store
 
 
-def create_app(database_path: str | Path | None = None) -> FastAPI:
+def create_app(
+    database_path: str | Path | None = None,
+    *,
+    database_url: str | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="QSupply API",
         description="Local dashboard API backed by the existing QSupply Python package.",
         version="0.1.0",
     )
-    app.state.run_store = SQLiteRunStore(database_path)
+    app.state.run_store = create_run_store(database_path, database_url)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -131,7 +135,12 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
             )
 
         run_id = str(uuid4())
-        record = app.state.run_store.create(run_id, request.instance_id, request.solver.value)
+        record = app.state.run_store.create(
+            run_id,
+            request.instance_id,
+            request.solver.value,
+            request_payload=request.model_dump(mode="json"),
+        )
         background_tasks.add_task(
             execute_run,
             app.state.run_store,
