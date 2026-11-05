@@ -126,7 +126,9 @@ Rather than assuming a particular optimization paradigm is superior, QSupply aim
 
 ## Status
 
-🚧 QSupply is currently in the research and architecture phase.
+🚧 QSupply is an early local prototype. It includes tested Python optimization
+models, CVRP heuristic and exact solvers, benchmarking, an optional API, and a
+browser dashboard. Multimodal routing and quantum execution are not implemented.
 
 Current focus:
 - System architecture and core optimization framework
@@ -135,7 +137,7 @@ Current focus:
 - Hybrid quantum-classical workflows
 - Initial enterprise use cases in supply chain and logistics
 
-The first public prototype is under development.
+The first usable local prototype is available below.
 
 ### Implemented functionality: QUBO energy evaluation
 
@@ -185,6 +187,33 @@ Benchmark reports include generated seeds and
 instance configuration; heuristic construction failures are reported without
 aborting exact evaluation. Timings are single-run observations, not statistical
 performance claims.
+
+### Local dashboard and API
+
+The optional FastAPI adapter exposes the existing CVRP engine and stores run
+history in SQLite at `~/.qsupply/runs.sqlite3`. The React + TypeScript dashboard
+connects to that API; its CVRP instances and multimodal network explorer are
+clearly labelled synthetic. It does not show fabricated cost, delivery-time,
+carbon or utilization KPIs. See [`docs/web-api.md`](docs/web-api.md) for API
+details and limitations.
+
+To start the application from the repository root, use two terminals:
+
+```sh
+# Terminal 1: optional Python API dependencies, then start the API
+python3 -m pip install -r requirements-web.txt
+PYTHONPATH=src python3 -m uvicorn qsupply.api.app:app --reload --host 127.0.0.1 --port 8000
+
+# Terminal 2: install frontend dependencies, then start Vite
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). For the backend API docs,
+open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). Install
+`requirements-web-test.txt` to run the API tests; run `npm test` and `npm run
+build` from `frontend` for dashboard tests and production compilation.
 
 ---
 
