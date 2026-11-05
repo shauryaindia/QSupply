@@ -48,6 +48,22 @@ class TestQSupplyAPI(unittest.TestCase):
         self.assertTrue(all(instance["synthetic"] for instance in instances))
         self.assertFalse(next(item for item in instances if item["id"] == "synthetic-11")["exact_supported"])
 
+    def test_cors_allows_local_and_production_frontend_origins(self):
+        allowed_origins = (
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://qsupply.netlify.app",
+            "https://qsupply.macrovisionai.com",
+        )
+
+        for origin in allowed_origins:
+            with self.subTest(origin=origin):
+                response = self.client.get(
+                    "/api/v1/health", headers={"Origin": origin}
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers.get("access-control-allow-origin"), origin)
+
     def test_post_executes_actual_nearest_neighbor_and_persists_validated_routes(self):
         response = self.submit(solver="nearest-neighbor")
         self.assertEqual(response.status_code, 202)

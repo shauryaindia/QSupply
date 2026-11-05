@@ -38,7 +38,12 @@ def create_app(
     app.state.run_store = create_run_store(database_path, database_url)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://qsupply.netlify.app",
+            "https://qsupply.macrovisionai.com",
+        ],
         allow_credentials=False,
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
