@@ -66,7 +66,11 @@ Our vision is to bridge Operations Research, Artificial Intelligence, and Quantu
 - Quantum Solver Integrations
 ---
 
-## Supported Frameworks
+## Planned Framework Integrations
+
+No external solver or framework integrations are implemented yet. The following are
+planned options for future integrations; their presence here does not indicate
+current support:
 
 - OR-Tools
 - Pyomo
@@ -85,7 +89,7 @@ Our vision is to bridge Operations Research, Artificial Intelligence, and Quantu
 
 - Core Optimization Architecture
 - Classical Optimization Modules
-- Benchmark Framework
+- Benchmark Framework (initial CVRP benchmarking implemented)
 
 ### Phase 2
 
@@ -132,6 +136,44 @@ Current focus:
 - Initial enterprise use cases in supply chain and logistics
 
 The first public prototype is under development.
+
+### Implemented functionality: QUBO energy evaluation
+
+The repository now includes a minimal Python `QUBO` model for named binary
+variables. It evaluates `E(x) = Σ Q[i,j] × x[i] × x[j]` for a complete
+assignment and reports clear errors for missing, unknown, or non-binary
+assignment values. Boolean assignments (`False`/`True`) are also accepted as
+0/1. See [`src/README.md`](src/README.md) for a usage example and test command.
+QAOA and solver framework integrations remain planned work.
+
+### Implemented functionality: CVRP route heuristic
+
+The `CVRPProblem` model represents a single depot, customer demands, vehicle
+capacities, and a complete distance matrix. The dependency-free
+`NearestNeighborTwoOptSolver` constructs capacity-feasible routes and applies
+2-opt local search, with a synthetic five-customer, two-vehicle example in
+[`examples/cvrp_synthetic.py`](examples/cvrp_synthetic.py). It is a heuristic
+and is not guaranteed to find a globally optimal solution. QAOA, quantum
+advantage, and real-world map integration are not implemented.
+
+### Implemented functionality: CVRP benchmarking
+
+The benchmarking engine compares the nearest-neighbour seed, its 2-opt-improved
+routes, and an exact reference on seeded synthetic instances with 5, 7, and 9
+customers. The exact subset dynamic program is capped at 10 customers and has
+exponential time and memory growth; it is intended only as a small-instance
+reference. Results include routes, distance, feasibility, vehicles used,
+wall-clock time, and heuristic optimality gap. The gap is measured against the
+exact result; heuristic results are not globally optimality claims. See
+[`benchmarks/README.md`](benchmarks/README.md).
+
+The exact solver preserves integer/rational distance precision. Each input
+Python float is treated as its exact stored IEEE-754 binary value and summed
+without intermediate rounding; capacity constraints use the same convention.
+Benchmark reports include generated seeds and
+instance configuration; heuristic construction failures are reported without
+aborting exact evaluation. Timings are single-run observations, not statistical
+performance claims.
 
 ---
 
