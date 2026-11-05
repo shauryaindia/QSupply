@@ -195,6 +195,34 @@ def global_demo_response(demo: GlobalDemoScenario) -> dict[str, Any]:
     }
 
 
+def normalize_persisted_global_optimization(record: dict[str, Any]) -> dict[str, Any]:
+    """Recover legacy leg exposure from known links; leave unknown values null.
+
+    Store reads decode fresh JSON objects, so this only adapts API responses and
+    never rewrites persisted records.
+    """
+    result = record.get("result")
+    if not isinstance(result, dict):
+        return record
+
+    exposure_by_link = {
+        link.id: float(link.resilience_exposure)
+        for link in global_demo_network().links
+    }
+    for plan_name in ("baseline", "recovery"):
+        plan = result.get(plan_name)
+        if not isinstance(plan, dict):
+            continue
+        routes = list(plan.get("routes", {}).values())
+        for alternatives in plan.get("alternatives", {}).values():
+            routes.extend(alternatives)
+        for route in routes:
+            for leg in route.get("legs", []):
+                if "resilience_exposure" not in leg:
+                    leg["resilience_exposure"] = exposure_by_link.get(leg.get("link_id"))
+    return record
+
+
 def shipment_response(profile) -> GlobalShipment:
     network = global_demo_network()
     request = profile.request
@@ -625,6 +653,22 @@ def answer_decision_question(
 
 
 def _route_from_dict(data: dict[str, Any]) -> CandidateRoute:
+    exposure_by_link = {
+        link.id: float(link.resilience_exposure)
+        for link in global_demo_network().links
+    }
+
+    def leg_exposure(leg: dict[str, Any]) -> float:
+        stored = leg.get("resilience_exposure")
+        if stored is not None:
+            return float(stored)
+        try:
+            return exposure_by_link[leg["link_id"]]
+        except KeyError as error:
+            raise ValueError(
+                f"Cannot reconstruct resilience exposure for unknown link {leg.get('link_id')!r}"
+            ) from error
+
     legs = tuple(
         RouteLeg(
             link_id=leg["link_id"],
@@ -637,7 +681,7 @@ def _route_from_dict(data: dict[str, Any]) -> CandidateRoute:
             carbon_kg=leg["carbon_kg"],
             capacity=leg["capacity"],
             geometry=tuple(tuple(point) for point in leg["geometry"]),
-            resilience_exposure=leg.get("resilience_exposure", 0.0),
+            resilience_exposure=leg_exposure(leg),
         )
         for leg in data["legs"]
     )

@@ -29,6 +29,7 @@ from .global_service import (
     scenario_response,
     get_global_scenario,
     global_demo_response,
+    normalize_persisted_global_optimization,
     shipment_response,
     answer_decision_question,
 )
@@ -324,7 +325,7 @@ def create_app(
     ) -> GlobalOptimizationListResponse:
         return GlobalOptimizationListResponse(
             items=[
-                GlobalOptimizationRecord.model_validate(item)
+                GlobalOptimizationRecord.model_validate(normalize_persisted_global_optimization(item))
                 for item in app.state.run_store.list_global_optimizations(limit)
             ]
         )
@@ -338,7 +339,7 @@ def create_app(
         record = app.state.run_store.get_global_optimization(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Optimization run was not found")
-        return GlobalOptimizationRecord.model_validate(record)
+        return GlobalOptimizationRecord.model_validate(normalize_persisted_global_optimization(record))
 
     @app.get(
         "/api/v1/global/optimizations/{run_id}/report.csv",
@@ -349,6 +350,7 @@ def create_app(
         record = app.state.run_store.get_global_optimization(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Optimization run was not found")
+        normalize_persisted_global_optimization(record)
         if record["status"] != "completed" or record["result"] is None:
             raise HTTPException(status_code=409, detail="Completed optimization result is not available")
         result = record["result"]
@@ -426,7 +428,9 @@ def create_app(
                         leg["freight_cost"],
                         leg["carbon_kg"],
                         leg["capacity"],
-                        leg["resilience_exposure"],
+                        leg.get("resilience_exposure")
+                        if leg.get("resilience_exposure") is not None
+                        else "unknown",
                     ])
         writer.writerow([])
         writer.writerow(["Assumptions", "Synthetic costs, transit times, capacities, emissions factors and disruption inputs; rule-based route analysis; no customs, handling, inventory or reliability model."])
@@ -445,6 +449,7 @@ def create_app(
         record = app.state.run_store.get_global_optimization(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Optimization run was not found")
+        normalize_persisted_global_optimization(record)
         if record["status"] != "completed" or record["result"] is None:
             raise HTTPException(status_code=409, detail="Completed optimization result is not available")
         return Response(
@@ -464,6 +469,7 @@ def create_app(
         record = app.state.run_store.get_global_optimization(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Optimization run was not found")
+        normalize_persisted_global_optimization(record)
         if record["status"] != "completed" or record["result"] is None:
             raise HTTPException(status_code=409, detail="Completed optimization result is not available")
         try:
@@ -493,6 +499,7 @@ def create_app(
         record = app.state.run_store.get_global_optimization(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Optimization run was not found")
+        normalize_persisted_global_optimization(record)
         if record["status"] != "completed" or record["result"] is None:
             raise HTTPException(status_code=409, detail="Optimization result is not complete")
         try:

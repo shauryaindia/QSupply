@@ -257,7 +257,10 @@ class RouteLegResponse(BaseModel):
     carbon_kg: float
     capacity: int | None
     geometry: list[tuple[float, float]]
-    resilience_exposure: float
+    resilience_exposure: float | None = Field(
+        default=None,
+        description="Synthetic link exposure; null when a legacy link cannot be matched to current network data.",
+    )
 
 
 class CandidateRouteResponse(BaseModel):

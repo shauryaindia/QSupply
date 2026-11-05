@@ -1016,8 +1016,11 @@ export interface components {
                 number,
                 number
             ][];
-            /** Resilience Exposure */
-            resilience_exposure: number;
+            /**
+             * Resilience Exposure
+             * @description Synthetic link exposure; null when a legacy link cannot be matched to current network data.
+             */
+            resilience_exposure?: number | null;
         };
         /** RouteMetricContribution */
         RouteMetricContribution: {

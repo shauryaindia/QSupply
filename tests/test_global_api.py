@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -5,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from qsupply.api.app import create_app
+from qsupply.network.global_demo import global_demo_network
 
 
 class TestGlobalMultimodalAPI(unittest.TestCase):
@@ -301,6 +303,80 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
             self.assertEqual(
                 restarted.get(f"/api/v1/global/optimizations/{record['id']}").json(), record
             )
+
+    def test_legacy_persisted_route_legs_are_adapted_without_rewriting_history(self):
+        created = self.client.post("/api/v1/global/optimizations", json={}).json()
+        run_id = created["id"]
+        with self.app.state.run_store._connection() as connection:
+            row = connection.execute(
+                "SELECT result_json FROM global_optimization_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            stored_result = json.loads(row["result_json"])
+            for plan_name in ("baseline", "recovery"):
+                plan = stored_result.get(plan_name)
+                if not plan:
+                    continue
+                routes = list(plan["routes"].values())
+                for options in plan["alternatives"].values():
+                    routes.extend(options)
+                for route in routes:
+                    for leg in route["legs"]:
+                        leg.pop("resilience_exposure", None)
+            # An old link ID absent from the current network must remain unknown.
+            legacy_alternative = stored_result["recovery"]["alternatives"]["EXP-205"][0]
+            legacy_alternative["legs"][0]["link_id"] = "retired-unknown-link"
+            stored_result["baseline"]["routes"]["EXP-104"]["legs"][0]["link_id"] = "retired-unknown-link"
+            connection.execute(
+                "UPDATE global_optimization_runs SET result_json = ? WHERE id = ?",
+                (json.dumps(stored_result, separators=(",", ":")), run_id),
+            )
+
+        listed = self.client.get("/api/v1/global/optimizations")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        listed_run = next(item for item in listed.json()["items"] if item["id"] == run_id)
+        detailed = self.client.get(f"/api/v1/global/optimizations/{run_id}")
+        self.assertEqual(detailed.status_code, 200, detailed.text)
+        self.assertEqual(detailed.json(), listed_run)
+
+        # Known links are reconstructed from the current modeled network.
+        link_exposure = {
+            link.id: float(link.resilience_exposure)
+            for link in global_demo_network().links
+        }
+        plan = detailed.json()["result"]["recovery"]
+        known_leg = plan["routes"]["EXP-205"]["legs"][0]
+        self.assertEqual(known_leg["resilience_exposure"], link_exposure[known_leg["link_id"]])
+        unknown_leg = plan["alternatives"]["EXP-205"][0]["legs"][0]
+        self.assertEqual(unknown_leg["link_id"], "retired-unknown-link")
+        self.assertIsNone(unknown_leg["resilience_exposure"])
+        self.assertIsNone(
+            detailed.json()["result"]["baseline"]["routes"]["EXP-104"]["legs"][0]["resilience_exposure"]
+        )
+
+        # Scenario history, both reports, route intelligence, and movement remain usable.
+        comparison = self.client.get(f"/api/v1/global/optimizations/{run_id}")
+        self.assertTrue(comparison.json()["result"]["recovery_feasible"])
+        csv_report = self.client.get(f"/api/v1/global/optimizations/{run_id}/report.csv")
+        self.assertEqual(csv_report.status_code, 200)
+        self.assertIn("unknown", csv_report.text)
+        self.assertEqual(self.client.get(f"/api/v1/global/optimizations/{run_id}/report.pdf").status_code, 200)
+        intelligence = self.client.post(
+            "/api/v1/global/route-intelligence",
+            json={"shipment_id": "EXP-205", "scenario_id": "synthetic-suez-capacity-restriction"},
+        )
+        self.assertEqual(intelligence.status_code, 200, intelligence.text)
+        movement = self.client.get(
+            f"/api/v1/global/optimizations/{run_id}/shipments/EXP-205/position?elapsed_time=1"
+        )
+        self.assertEqual(movement.status_code, 200, movement.text)
+
+        # Reading via API did not backfill or otherwise rewrite the stored JSON.
+        persisted = self.app.state.run_store.get_global_optimization(run_id)["result"]
+        self.assertNotIn(
+            "resilience_exposure",
+            persisted["recovery"]["routes"]["EXP-205"]["legs"][0],
+        )
 
     def test_invalid_weights_scenarios_and_unknown_runs_are_rejected(self):
         invalid_weights = self.client.post(
