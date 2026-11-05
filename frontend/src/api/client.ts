@@ -11,6 +11,7 @@ export type GlobalShipment = components["schemas"]["GlobalShipment"];
 export type CandidateRoute = components["schemas"]["CandidateRouteResponse"];
 export type RouteIntelligence = components["schemas"]["RouteIntelligenceResponse"];
 export type GlobalOptimization = components["schemas"]["GlobalOptimizationRecord"];
+export type GlobalDemo = components["schemas"]["GlobalDemoScenarioResponse"];
 
 type RunCreate = paths["/api/v1/runs"]["post"]["requestBody"] extends {
   content: { "application/json": infer Body };
@@ -97,6 +98,7 @@ export const api = {
   network: () => request<NetworkResponse>("/api/v1/networks/demo"),
   globalNetwork: () => request<NetworkResponse>("/api/v1/global/network"),
   globalShipments: () => request<GlobalShipment[]>("/api/v1/global/shipments"),
+  globalDemos: () => request<GlobalDemo[]>("/api/v1/global/demos"),
   globalScenarios: () =>
     request<components["schemas"]["NetworkScenario"][]>("/api/v1/global/scenarios"),
   createGlobalScenario: (input: GlobalScenarioCreate) =>

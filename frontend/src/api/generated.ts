@@ -106,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/global/demos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Demos */
+        get: operations["global_demos_api_v1_global_demos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/global/shipments/{shipment_id}": {
         parameters: {
             query?: never;
@@ -420,6 +437,28 @@ export interface components {
             /** Route Id */
             route_id?: string | null;
         };
+        /** GlobalDemoScenarioResponse */
+        GlobalDemoScenarioResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Business Problem */
+            business_problem: string;
+            /** Shipment Ids */
+            shipment_ids: string[];
+            /** Scenario Id */
+            scenario_id: string | null;
+            /** Constraints */
+            constraints: string[];
+            /** Alternatives */
+            alternatives: string[];
+            /**
+             * Synthetic
+             * @default true
+             */
+            synthetic: boolean;
+        };
         /** GlobalOptimizationListResponse */
         GlobalOptimizationListResponse: {
             /** Items */
@@ -456,6 +495,8 @@ export interface components {
              * @default 8
              */
             max_routes: number;
+            /** Shipment Ids */
+            shipment_ids?: string[] | null;
         };
         /** GlobalOptimizationResult */
         GlobalOptimizationResult: {
@@ -471,6 +512,8 @@ export interface components {
             /** Scenario Id */
             scenario_id: string | null;
             scenario_snapshot?: components["schemas"]["NetworkScenario"] | null;
+            /** Shipment Ids */
+            shipment_ids?: string[];
             weights: components["schemas"]["ObjectiveWeightsInput"];
             normalization_references: components["schemas"]["ObjectiveReferencesResponse"];
             /** Recovery Feasible */
@@ -908,11 +951,15 @@ export interface components {
              * @default 8
              */
             max_routes: number;
+            /** Shipment Ids */
+            shipment_ids?: string[] | null;
         };
         /** RouteIntelligenceResponse */
         RouteIntelligenceResponse: {
             /** Shipment Id */
             shipment_id: string;
+            /** Assignment Shipment Ids */
+            assignment_shipment_ids?: string[];
             /** Scenario Id */
             scenario_id: string | null;
             /**
@@ -1249,6 +1296,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GlobalShipment"][];
+                };
+            };
+        };
+    };
+    global_demos_api_v1_global_demos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalDemoScenarioResponse"][];
                 };
             };
         };

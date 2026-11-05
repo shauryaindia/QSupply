@@ -139,12 +139,12 @@ class GlobalScenarioCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
-    closed_link_ids: list[str] = Field(default_factory=list, max_length=50)
-    unavailable_location_ids: list[str] = Field(default_factory=list, max_length=50)
-    capacity_overrides: dict[str, StrictInt] = Field(default_factory=dict, max_length=50)
-    cost_multipliers: dict[str, float] = Field(default_factory=dict, max_length=50)
-    transit_time_multipliers: dict[str, float] = Field(default_factory=dict, max_length=50)
-    transit_time_additions: dict[str, float] = Field(default_factory=dict, max_length=50)
+    closed_link_ids: list[str] = Field(default_factory=list, max_length=500)
+    unavailable_location_ids: list[str] = Field(default_factory=list, max_length=500)
+    capacity_overrides: dict[str, StrictInt] = Field(default_factory=dict, max_length=500)
+    cost_multipliers: dict[str, float] = Field(default_factory=dict, max_length=500)
+    transit_time_multipliers: dict[str, float] = Field(default_factory=dict, max_length=500)
+    transit_time_additions: dict[str, float] = Field(default_factory=dict, max_length=500)
 
     @model_validator(mode="after")
     def validate_name_and_values(self) -> "GlobalScenarioCreateRequest":
@@ -160,6 +160,17 @@ class GlobalScenarioCreateRequest(BaseModel):
         if any(isinstance(value, bool) or value < 0 for value in self.capacity_overrides.values()):
             raise ValueError("capacity overrides must be non-negative integers")
         return self
+
+
+class GlobalDemoScenarioResponse(BaseModel):
+    id: str
+    name: str
+    business_problem: str
+    shipment_ids: list[str]
+    scenario_id: str | None
+    constraints: list[str]
+    alternatives: list[str]
+    synthetic: bool = True
 
 
 class NetworkResponse(BaseModel):
@@ -223,6 +234,7 @@ class RouteIntelligenceRequest(BaseModel):
     scenario_id: str | None = None
     weights: ObjectiveWeightsInput = Field(default_factory=ObjectiveWeightsInput)
     max_routes: int = Field(default=8, ge=1, le=8)
+    shipment_ids: list[str] | None = Field(default=None, min_length=1, max_length=8)
 
 
 class GlobalOptimizationRequest(BaseModel):
@@ -231,6 +243,7 @@ class GlobalOptimizationRequest(BaseModel):
     scenario_id: str | None = "synthetic-suez-capacity-restriction"
     weights: ObjectiveWeightsInput = Field(default_factory=ObjectiveWeightsInput)
     max_routes: int = Field(default=8, ge=1, le=8)
+    shipment_ids: list[str] | None = Field(default=None, min_length=1, max_length=8)
 
 
 class RouteLegResponse(BaseModel):
@@ -319,6 +332,7 @@ class RouteAnalysisResponse(BaseModel):
 
 class RouteIntelligenceResponse(BaseModel):
     shipment_id: str
+    assignment_shipment_ids: list[str] = Field(default_factory=list)
     scenario_id: str | None
     synthetic: bool = True
     recommended_route_id: str
@@ -382,6 +396,7 @@ class GlobalOptimizationResult(BaseModel):
     synthetic: bool = True
     scenario_id: str | None
     scenario_snapshot: NetworkScenario | None = None
+    shipment_ids: list[str] = Field(default_factory=list)
     weights: ObjectiveWeightsInput
     normalization_references: ObjectiveReferencesResponse
     recovery_feasible: bool

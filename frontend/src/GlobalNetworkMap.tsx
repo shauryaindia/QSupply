@@ -88,7 +88,13 @@ export default function GlobalNetworkMap({
   linkUtilization,
   linkUsage,
   capacityOverrides,
+  visibleLocationIds,
+  visibleLinkIds,
+  regionFilter,
+  countryFilter,
+  selectedLinkId,
   onSelectLocation,
+  onSelectLink,
 }: {
   network: NetworkResponse;
   routes: CandidateRoute[];
@@ -100,7 +106,13 @@ export default function GlobalNetworkMap({
   linkUtilization: Record<string, number>;
   linkUsage: Record<string, number>;
   capacityOverrides: Record<string, number>;
+  visibleLocationIds: Set<string>;
+  visibleLinkIds: Set<string>;
+  regionFilter: string;
+  countryFilter: string;
+  selectedLinkId: string | null;
   onSelectLocation: (location: NetworkNode) => void;
+  onSelectLink: (linkId: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -139,24 +151,26 @@ export default function GlobalNetworkMap({
     const disrupted = new Set(disruptedLinkIds);
 
     network.links.forEach((link) => {
-      if (!modeFilters.has(link.mode)) return;
+      if (!modeFilters.has(link.mode) || !visibleLinkIds.has(link.id)) return;
       const coordinates = link.geometry as [number, number][];
       if (coordinates.length < 2) return;
       const capacity = capacityOverrides[link.id] ?? link.capacity;
       const utilization = linkUtilization[link.id];
+      const selected = selectedLinkId === link.id;
       const usageText = utilization === undefined
         ? ""
         : ` · assigned ${linkUsage[link.id] ?? 0}/${capacity ?? "∞"} ${link.capacity_unit} (${(utilization * 100).toFixed(1)}%)`;
       splitAtAntimeridian(coordinates).forEach((segment) =>
         L.polyline(segment, {
-          color: disrupted.has(link.id) ? "#d54646" : modeColors[link.mode] ?? "#77899b",
-          opacity: disrupted.has(link.id) ? 0.9 : 0.38,
-          weight: disrupted.has(link.id) ? 3 : 1.5,
+          color: selected ? "#082e47" : disrupted.has(link.id) ? "#d54646" : modeColors[link.mode] ?? "#77899b",
+          opacity: selected ? 1 : disrupted.has(link.id) ? 0.9 : 0.38,
+          weight: selected ? 4 : disrupted.has(link.id) ? 3 : 1.5,
           dashArray: disrupted.has(link.id) ? "8 7" : undefined,
         })
           .bindTooltip(
             `${link.mode.toUpperCase()} · ${link.distance_km?.toLocaleString() ?? "—"} km · ${capacity ?? "unbounded"} ${link.capacity_unit}${usageText}${disrupted.has(link.id) ? " · scenario constrained" : ""}`,
           )
+          .on("click", () => onSelectLink(link.id))
           .addTo(group),
       );
     });
@@ -165,7 +179,7 @@ export default function GlobalNetworkMap({
       const selected = route.id === selectedRouteId;
       if (!selected && routes.length > 4) continue;
       route.legs.forEach((leg) => {
-        if (!modeFilters.has(leg.mode)) return;
+        if (!modeFilters.has(leg.mode) || !visibleLinkIds.has(leg.link_id)) return;
         splitAtAntimeridian(leg.geometry as [number, number][]).forEach((segment) =>
           L.polyline(segment, {
             color: selected ? "#0a9b8e" : modeColors[leg.mode] ?? "#77899b",
@@ -180,6 +194,7 @@ export default function GlobalNetworkMap({
     }
 
     for (const node of network.nodes) {
+      if (!visibleLocationIds.has(node.id)) continue;
       if (node.latitude == null || node.longitude == null) continue;
       const marker = L.marker([node.latitude, node.longitude], {
         icon: locationIcon(node.kind, selectedLocation?.id === node.id),
@@ -213,8 +228,39 @@ export default function GlobalNetworkMap({
     linkUtilization,
     linkUsage,
     capacityOverrides,
+    visibleLocationIds,
+    visibleLinkIds,
+    selectedLinkId,
     onSelectLocation,
+    onSelectLink,
   ]);
+
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) return;
+    const locations = network.nodes.filter((node) =>
+      node.latitude != null && node.longitude != null
+      && (regionFilter === "all" || node.region === regionFilter)
+      && (countryFilter === "all" || node.country_code === countryFilter),
+    );
+    if (locations.length === 0) return;
+    if (regionFilter === "all" && countryFilter === "all") {
+      instance.setView([25, 0], 2, { animate: true });
+      return;
+    }
+    const bounds = L.latLngBounds(locations.map((node) => [node.latitude!, node.longitude!] as [number, number]));
+    instance.fitBounds(bounds, { padding: [24, 24], maxZoom: 6, animate: true });
+  }, [network, regionFilter, countryFilter]);
+
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance || selectedLocation?.latitude == null || selectedLocation.longitude == null) return;
+    instance.setView(
+      [selectedLocation.latitude, selectedLocation.longitude],
+      Math.max(instance.getZoom(), 4),
+      { animate: true },
+    );
+  }, [selectedLocation]);
 
   return (
     <div

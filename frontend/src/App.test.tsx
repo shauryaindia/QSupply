@@ -25,6 +25,7 @@ vi.mock("./api/client", async (importOriginal) => {
       network: vi.fn(),
       globalNetwork: vi.fn(),
       globalShipments: vi.fn(),
+      globalDemos: vi.fn(),
       globalScenarios: vi.fn(),
       createGlobalScenario: vi.fn(),
       deleteGlobalScenario: vi.fn(),
@@ -152,6 +153,7 @@ beforeEach(() => {
     ],
   });
   vi.mocked(api.globalShipments).mockResolvedValue([]);
+  vi.mocked(api.globalDemos).mockResolvedValue([]);
   vi.mocked(api.globalScenarios).mockResolvedValue([
     {
       id: "synthetic-suez-capacity-restriction",
@@ -210,6 +212,37 @@ describe("QSupply dashboard interactions", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Not configured or verified")).toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("loads a runnable named global demo and its explicit assignment scope", async () => {
+    const shipment = {
+      id: "EXP-104", origin_id: "shanghai-hub", origin_name: "Shanghai",
+      destination_id: "rotterdam-hub", destination_name: "Rotterdam", quantity: 2,
+      quantity_unit: "load_unit", cargo_category: "Electronics", priority: 5,
+      deadline: 24, deadline_unit: "day", delay_penalty_per_day: 18,
+      maximum_transit_time: 60, departure_time: "2026-01-01T00:00:00Z", synthetic: true,
+    };
+    vi.mocked(api.globalShipments).mockResolvedValue([shipment]);
+    vi.mocked(api.globalDemos).mockResolvedValue([{
+      id: "demo-china-germany",
+      name: "China → Germany: mode trade-off",
+      business_problem: "Compare sea, air and rail routes for Shanghai electronics.",
+      shipment_ids: [shipment.id],
+      scenario_id: null,
+      constraints: ["Synthetic shipment quantity: 2 load units"],
+      alternatives: ["Sea", "Air", "Rail"],
+      synthetic: true,
+    }]);
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: /Network explorer/ }));
+    expect(await screen.findByLabelText("Global demonstration scenario")).toHaveValue("demo-china-germany");
+    expect(screen.getByLabelText("Shipment")).toHaveValue(shipment.id);
+    expect((screen.getByLabelText("Joint assignment shipments") as HTMLSelectElement).selectedOptions[0]?.value).toBe(shipment.id);
+    expect(screen.getByText("Compare sea, air and rail routes for Shanghai electronics.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Map region")).toBeInTheDocument();
+    expect(screen.getByLabelText("Map country")).toBeInTheDocument();
   });
 
   it("formats exact rational distances in run history as readable decimals", async () => {
@@ -451,12 +484,13 @@ describe("QSupply dashboard interactions", () => {
       within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: /Network explorer/ }),
     );
     await screen.findByTestId("global-map");
-    await screen.findByRole("option", { name: /EXP-104/ });
+    expect(await screen.findByLabelText("Shipment")).toHaveValue("EXP-104");
     await user.click(screen.getByRole("button", { name: "Run recovery optimization" }));
     expect(api.createGlobalOptimization).toHaveBeenCalledWith({
       scenario_id: scenarioId,
       weights: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
       max_routes: 8,
+      shipment_ids: [shipment.id],
     });
     expect(await screen.findByText("Recovery feasible")).toBeInTheDocument();
     expect(await screen.findByText("Recommended for the configured weighted profile.")).toBeInTheDocument();

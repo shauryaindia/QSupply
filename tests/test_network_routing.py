@@ -17,8 +17,10 @@ from qsupply.network import (
     validate_candidate_route,
 )
 from qsupply.network.global_demo import (
+    global_demo_disruptions,
     global_demo_network,
     global_demo_scenario,
+    global_demo_scenarios,
     global_demo_shipments,
 )
 
@@ -46,6 +48,45 @@ class TestMultimodalRouteGeneration(unittest.TestCase):
                     reachable.add(destination)
                     pending.append(destination)
         self.assertEqual(reachable, names)
+        required_countries = {
+            "GB", "FR", "DE", "NL", "BE", "IT", "ES", "RU", "CN", "JP", "KR",
+            "SG", "MY", "TH", "VN", "ID", "IN", "BD", "LK", "AE", "SA", "QA",
+            "OM", "US", "CA", "MX", "BR", "AR", "CL", "AU", "NZ",
+        }
+        self.assertTrue(required_countries.issubset({item.country_code for item in network.locations.values()}))
+        for link in network.links:
+            origin = network.locations[link.origin_id]
+            destination = network.locations[link.destination_id]
+            if link.mode is TransportMode.SEA:
+                self.assertEqual((origin.kind, destination.kind), (LocationKind.PORT, LocationKind.PORT), link.id)
+            if link.mode is TransportMode.AIR:
+                self.assertEqual((origin.kind, destination.kind), (LocationKind.AIRPORT, LocationKind.AIRPORT), link.id)
+            if link.mode is TransportMode.ROAD:
+                self.assertLess(link.distance_km, 3000, link.id)
+        for scenario in global_demo_disruptions():
+            scenario.validate_for(network)
+
+    def test_all_six_demo_shipments_have_feasible_multimodal_options(self):
+        network = global_demo_network()
+        profiles = {profile.request.id: profile for profile in global_demo_shipments()}
+        disruptions = {scenario.id: scenario for scenario in global_demo_disruptions()}
+        demos = global_demo_scenarios()
+        self.assertEqual(len(demos), 6)
+        for demo in demos:
+            with self.subTest(demo=demo.id):
+                for shipment_id in demo.shipment_ids:
+                    profile = profiles[shipment_id]
+                    routes = generate_candidate_routes(
+                        network,
+                        profile.request,
+                        disruptions.get(demo.scenario_id),
+                        max_routes=30,
+                    )
+                    feasible = [route for route in routes if route.transit_time <= profile.maximum_transit_time]
+                    self.assertTrue(feasible)
+                    for route in feasible:
+                        validate_candidate_route(network, profile.request, route, disruptions.get(demo.scenario_id))
+                self.assertTrue(demo.alternatives)
 
     def test_candidate_generation_is_deterministic_and_independently_validated(self):
         network = global_demo_network()

@@ -2669,3 +2669,23 @@ a:focus-visible {
     flex-wrap: wrap;
   }
 }
+
+.map-geography-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbfd; }
+.map-geography-filters > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.map-geography-filters select { min-width: 150px; max-width: 230px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; background: white; color: var(--ink); }
+.map-location-filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; min-height: 34px; }
+.map-location-filters label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
+.map-location-filters input { accent-color: var(--teal); }
+.corridor-inspector { border-left: 3px solid #0a9b8e; }
+.demo-brief { display: grid; gap: 7px; padding: 12px 14px; border: 1px solid #dce8ef; border-radius: 10px; background: #f5fafc; color: var(--ink); }
+.demo-brief strong { font-size: 13px; line-height: 1.45; }
+.demo-brief span, .demo-brief small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.demo-brief ul { margin: 0; padding-left: 17px; color: #536879; font-size: 11px; line-height: 1.55; }
+.global-run-form select[multiple] { min-height: 94px; }
+
+@media (max-width: 700px) {
+  .map-geography-filters { align-items: stretch; }
+  .map-geography-filters > label { flex: 1 1 130px; }
+  .map-geography-filters select { width: 100%; min-width: 0; }
+  .map-location-filters { flex: 1 1 100%; }
+}

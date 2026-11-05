@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from qsupply.network.global_demo import (
+    GlobalDemoScenario,
     global_demo_network,
+    global_demo_disruptions,
     global_demo_scenario,
     global_demo_shipments,
 )
@@ -76,7 +78,44 @@ def _stored_scenario(record: dict[str, Any]) -> DisruptionScenario:
 
 def global_network_response(scenario_store=None) -> NetworkResponse:
     network = global_demo_network()
-    scenario = global_demo_scenario()
+    scenario_labels = {
+        "synthetic-suez-capacity-restriction": (
+            "Synthetic Suez capacity restriction",
+            "Capacity and freight-cost overlay on a synthetic Suez-area route; not a live alert.",
+        ),
+        "synthetic-india-uae-combined-restriction": (
+            "India–UAE combined port restriction",
+            "Synthetic sea capacity reduction, rate increase, and additive port delay.",
+        ),
+        "synthetic-china-us-port-closure": (
+            "China–US Los Angeles sea-link closure",
+            "Closes one synthetic transpacific link to test alternate gateway recovery.",
+        ),
+        "synthetic-singapore-customs-delay": (
+            "Singapore–Australia customs delay",
+            "Adds a synthetic customs delay to one sea connection.",
+        ),
+        "synthetic-transatlantic-rate-surge": (
+            "Transatlantic rate and time increase",
+            "Applies synthetic ocean freight and transit-time multipliers.",
+        ),
+        "synthetic-india-rail-interruption": (
+            "India domestic rail interruption",
+            "Closes a synthetic rail link and lowers road capacity on an alternative corridor.",
+        ),
+        "synthetic-frankfurt-airport-disruption": (
+            "Frankfurt air-link disruption",
+            "Closes one synthetic air connection for route comparison.",
+        ),
+        "synthetic-eurasian-rail-restriction": (
+            "Eurasian rail capacity restriction",
+            "Reduces capacity and adds time on synthetic Eurasian rail links; border clearance is not modeled.",
+        ),
+        "synthetic-mumbai-road-capacity-reduction": (
+            "Mumbai road capacity reduction",
+            "Reduces synthetic road access capacity near Mumbai.",
+        ),
+    }
     return NetworkResponse(
         id="synthetic-global-network-v1",
         name="Global multimodal demonstration network",
@@ -121,13 +160,13 @@ def global_network_response(scenario_store=None) -> NetworkResponse:
             for link in network.links
         ],
         scenarios=[
-            scenario_response(
-                scenario,
-                name="Synthetic Suez capacity restriction",
-                description=(
-                    "Synthetic Suez corridor capacity restriction. This is a scenario "
-                    "input, not a live disruption alert."
-                ),
+            *(
+                scenario_response(
+                    scenario,
+                    name=scenario_labels[scenario.id][0],
+                    description=scenario_labels[scenario.id][1],
+                )
+                for scenario in global_demo_disruptions()
             ),
             *(
                 scenario_response(
@@ -141,6 +180,19 @@ def global_network_response(scenario_store=None) -> NetworkResponse:
             ),
         ],
     )
+
+
+def global_demo_response(demo: GlobalDemoScenario) -> dict[str, Any]:
+    return {
+        "id": demo.id,
+        "name": demo.name,
+        "business_problem": demo.business_problem,
+        "shipment_ids": list(demo.shipment_ids),
+        "scenario_id": demo.scenario_id,
+        "constraints": list(demo.constraints),
+        "alternatives": list(demo.alternatives),
+        "synthetic": True,
+    }
 
 
 def shipment_response(profile) -> GlobalShipment:
@@ -175,9 +227,9 @@ def get_shipment_profile(shipment_id: str):
 def get_global_scenario(scenario_id: str | None, scenario_store=None) -> DisruptionScenario | None:
     if scenario_id is None:
         return None
-    scenario = global_demo_scenario()
-    if scenario.id == scenario_id:
-        return scenario
+    for scenario in global_demo_disruptions():
+        if scenario.id == scenario_id:
+            return scenario
     record = scenario_store.get_global_scenario(scenario_id) if scenario_store else None
     return _stored_scenario(record) if record else None
 
@@ -272,11 +324,22 @@ def run_global_optimization(
     weights: dict[str, int],
     max_routes: int,
     scenario_store=None,
+    shipment_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     scenario = get_global_scenario(scenario_id, scenario_store)
     if scenario_id is not None and scenario is None:
         raise KeyError(scenario_id)
-    profiles = global_demo_shipments()
+    profile_by_id = {profile.request.id: profile for profile in global_demo_shipments()}
+    if shipment_ids is None:
+        # Keep the legacy API default stable; new demo workflows select explicit shipments.
+        profiles = tuple(profile_by_id[item] for item in ("EXP-104", "EXP-205"))
+    else:
+        if not shipment_ids or len(shipment_ids) > 8 or len(set(shipment_ids)) != len(shipment_ids):
+            raise ValueError("shipment_ids must contain between 1 and 8 unique shipment IDs")
+        try:
+            profiles = tuple(profile_by_id[item] for item in shipment_ids)
+        except KeyError as error:
+            raise KeyError(error.args[0]) from error
     comparison = compare_recovery(
         global_demo_network(),
         profiles,
@@ -291,19 +354,20 @@ def run_global_optimization(
         and scenario_store is not None
         else None
     )
+    built_in_scenario = (
+        next(
+            item
+            for item in global_network_response().scenarios
+            if item.id == scenario.id
+        )
+        if scenario is not None and stored_scenario is None
+        else None
+    )
     scenario_snapshot = (
         scenario_response(
             scenario,
-            name=(
-                "Synthetic Suez capacity restriction"
-                if stored_scenario is None
-                else stored_scenario["name"]
-            ),
-            description=(
-                "Built-in synthetic disruption"
-                if stored_scenario is None
-                else stored_scenario["description"]
-            ),
+            name=(built_in_scenario.name if stored_scenario is None else stored_scenario["name"]),
+            description=(built_in_scenario.description if stored_scenario is None else stored_scenario["description"]),
             custom=stored_scenario is not None,
             created_at=(stored_scenario["created_at"] if stored_scenario else None),
         ).model_dump(mode="json")
@@ -316,6 +380,7 @@ def run_global_optimization(
         "synthetic": True,
         "scenario_id": comparison.scenario_id,
         "scenario_snapshot": scenario_snapshot,
+        "shipment_ids": [profile.request.id for profile in profiles],
         "weights": weights,
         "normalization_references": {
             "cost": comparison.normalization_references.cost,
@@ -344,6 +409,7 @@ def route_intelligence(
     weights: dict[str, int],
     max_routes: int,
     scenario_store=None,
+    shipment_ids: list[str] | None = None,
 ) -> RouteIntelligenceResponse:
     profile = get_shipment_profile(shipment_id)
     if profile is None:
@@ -351,9 +417,19 @@ def route_intelligence(
     scenario = get_global_scenario(scenario_id, scenario_store)
     if scenario_id is not None and scenario is None:
         raise KeyError(scenario_id)
+    profile_by_id = {item.request.id: item for item in global_demo_shipments()}
+    selected_ids = shipment_ids or [shipment_id]
+    if not selected_ids or len(selected_ids) > 8 or len(set(selected_ids)) != len(selected_ids):
+        raise ValueError("shipment_ids must contain between 1 and 8 unique shipment IDs")
+    if shipment_id not in selected_ids:
+        raise ValueError("shipment_id must be included in shipment_ids")
+    try:
+        selected_profiles = tuple(profile_by_id[item] for item in selected_ids)
+    except KeyError as error:
+        raise KeyError(error.args[0]) from error
     comparison = compare_recovery(
         global_demo_network(),
-        global_demo_shipments(),
+        selected_profiles,
         scenario,
         ObjectiveWeights(**weights),
         max_routes=max_routes,
@@ -398,6 +474,7 @@ def route_intelligence(
             )
     return RouteIntelligenceResponse(
         shipment_id=shipment_id,
+        assignment_shipment_ids=list(selected_ids),
         scenario_id=scenario_id,
         recommended_route_id=recommended_id,
         assignment_route_id=assignment_route_id,

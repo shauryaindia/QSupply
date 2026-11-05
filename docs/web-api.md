@@ -27,12 +27,20 @@ The OpenAPI document is served at `http://127.0.0.1:8000/openapi.json`.
   routes.
 - `GET /api/v1/global/network`, `/shipments`, `/shipments/{id}`, and
   `/scenarios` expose the separate geocoded synthetic global demonstration.
+- `GET /api/v1/global/demos` lists six deterministic business examples with
+  shipment IDs, constraints, candidate alternatives and optional built-in
+  disruption scenarios.
 - `POST /api/v1/global/routes` generates and validates bounded candidate routes
   for a shipment under an optional disruption scenario.
 - `POST /api/v1/global/route-intelligence` returns route rankings, metric deltas
   against the selected baseline, deadline/capacity indicators, mode-level
   synthetic carbon and deterministic rule-based explanations. It does not call
   an LLM.
+- Route-intelligence and optimization requests accept optional `shipment_ids`
+  to define the capacity-sharing assignment scope. The legacy optimization
+  default remains the original `EXP-104` and `EXP-205` pair; the dashboard sends
+  the selected demo's shipment IDs explicitly. The bounded assignment supports
+  at most eight selected shipments.
 - `GET /api/v1/global/scenarios`, `POST /api/v1/global/scenarios`,
   `GET /api/v1/global/scenarios/{scenario_id}`, and
   `DELETE /api/v1/global/scenarios/{scenario_id}` list, persist, retrieve, and
@@ -96,7 +104,9 @@ the core package.
 This local API uses FastAPI's in-process background task mechanism. It is
 appropriate for small local examples, not a durable distributed job queue.
 
-The global demonstration uses synthetic routes, prices, transit times, capacity
+The global demonstration uses a curated synthetic graph of 74 locations and
+122 directed links, nine built-in what-if overlays, six demo workflows, and
+synthetic routes, prices, transit times, capacity
 and emissions. Global candidate paths are bounded and deterministic, and the
 shipment assignment search is exact only over those generated candidates and
 is limited to small batches. Resilience is a normalized route exposure metric;

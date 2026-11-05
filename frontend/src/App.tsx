@@ -18,6 +18,7 @@ import {
   formatNumber,
   type Capabilities,
   type CandidateRoute,
+  type GlobalDemo,
   type GlobalOptimization,
   type GlobalShipment,
   type RouteIntelligence,
@@ -826,6 +827,9 @@ function NetworkExplorer({
   onRunsChange: (runs: GlobalOptimization[]) => void;
 }) {
   const [shipments, setShipments] = useState<GlobalShipment[]>([]);
+  const [demos, setDemos] = useState<GlobalDemo[]>([]);
+  const [demoId, setDemoId] = useState("");
+  const [assignmentShipmentIds, setAssignmentShipmentIds] = useState<string[]>([]);
   const [scenarios, setScenarios] = useState<components["schemas"]["NetworkScenario"][]>(network?.scenarios ?? []);
   const [scenarioId, setScenarioId] = useState("");
   const [shipmentId, setShipmentId] = useState("");
@@ -853,6 +857,12 @@ function NetworkExplorer({
   const [selectedLocation, setSelectedLocation] = useState<
     NetworkResponse["nodes"][number] | null
   >(null);
+  const [regionFilter, setRegionFilter] = useState("all");
+  const [countryFilter, setCountryFilter] = useState("all");
+  const [locationTypeFilters, setLocationTypeFilters] = useState<Set<string>>(
+    () => new Set(["port", "airport", "rail_terminal", "inland"]),
+  );
+  const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
   const [modeFilters, setModeFilters] = useState<Set<string>>(
     () => new Set(["road", "rail", "sea", "air"]),
   );
@@ -868,17 +878,22 @@ function NetworkExplorer({
     let active = true;
     void Promise.all([
       api.globalShipments(),
+      api.globalDemos(),
       api.globalOptimizations(),
       api.globalScenarios(),
     ])
-      .then(([shipmentResponse, historyResponse, scenarioResponse]) => {
+      .then(([shipmentResponse, demoResponse, historyResponse, scenarioResponse]) => {
         if (!active) return;
         setShipments(shipmentResponse);
-        setShipmentId((current) => current || shipmentResponse[0]?.id || "");
+        setDemos(demoResponse);
+        const initialDemo = demoResponse.find((item) => item.id === "demo-china-germany") ?? demoResponse[0];
+        setDemoId((current) => current || initialDemo?.id || "");
+        setShipmentId((current) => current || initialDemo?.shipment_ids[0] || shipmentResponse[0]?.id || "");
+        setAssignmentShipmentIds((current) => current.length ? current : initialDemo?.shipment_ids ?? []);
         setHistory(historyResponse.items);
         setScenarios(scenarioResponse);
         onRunsChange(historyResponse.items);
-        setScenarioId((current) => current || network.scenarios[0]?.id || "");
+        setScenarioId((current) => current || (initialDemo ? initialDemo.scenario_id ?? "" : network.scenarios[0]?.id ?? ""));
       })
       .catch((cause: unknown) => {
         if (active) setError(cause instanceof Error ? cause.message : "Unable to load synthetic global data.");
@@ -895,6 +910,7 @@ function NetworkExplorer({
     void api
       .routeIntelligence({
         shipment_id: shipmentId,
+        shipment_ids: assignmentShipmentIds.length ? assignmentShipmentIds : [shipmentId],
         scenario_id: scenarioId || null,
         weights,
         max_routes: 8,
@@ -915,7 +931,7 @@ function NetworkExplorer({
     return () => {
       active = false;
     };
-  }, [network, shipmentId, scenarioId, weights]);
+  }, [network, shipmentId, assignmentShipmentIds, scenarioId, weights]);
 
   const result = activeRun?.result;
   const selectedPlan = result
@@ -945,9 +961,32 @@ function NetworkExplorer({
   };
   const scenario = scenarios.find((item) => item.id === scenarioId);
   const disruptedLinkIds = scenario
-    ? [...scenario.closed_link_ids, ...Object.keys(scenario.capacity_overrides)]
+    ? [...new Set([
+      ...scenario.closed_link_ids,
+      ...Object.keys(scenario.capacity_overrides),
+      ...Object.keys(scenario.cost_multipliers),
+      ...Object.keys(scenario.transit_time_multipliers),
+      ...Object.keys(scenario.transit_time_additions ?? {}),
+      ...(network?.links ?? []).filter((link) => scenario.unavailable_location_ids.includes(link.source) || scenario.unavailable_location_ids.includes(link.target)).map((link) => link.id),
+    ])]
     : [];
   const shipment = shipments.find((item) => item.id === shipmentId) ?? null;
+  const activeDemo = demos.find((item) => item.id === demoId) ?? null;
+  const regions = network ? [...new Set(network.nodes.map((node) => node.region).filter((item): item is string => Boolean(item)))].sort() : [];
+  const countries = network ? [...new Map(network.nodes
+    .filter((node) => regionFilter === "all" || node.region === regionFilter)
+    .map((node) => [node.country_code ?? "", node.country_name ?? node.country_code ?? "Unknown"] as const))]
+    .filter(([code]) => Boolean(code)).sort((left, right) => left[1].localeCompare(right[1])) : [];
+  const locationGroup = (kind: string) => ["port", "airport", "rail_terminal"].includes(kind) ? kind : "inland";
+  const visibleLocationIds = useMemo(() => new Set((network?.nodes ?? [])
+    .filter((node) => (regionFilter === "all" || node.region === regionFilter)
+      && (countryFilter === "all" || node.country_code === countryFilter)
+      && locationTypeFilters.has(locationGroup(node.kind)))
+    .map((node) => node.id)), [network, regionFilter, countryFilter, locationTypeFilters]);
+  const visibleLinkIds = useMemo(() => new Set((network?.links ?? [])
+    .filter((link) => visibleLocationIds.has(link.source) && visibleLocationIds.has(link.target))
+    .map((link) => link.id)), [network, visibleLocationIds]);
+  const selectedLink = network?.links.find((link) => link.id === selectedLinkId) ?? null;
   const baseRoute = result?.baseline.routes[shipmentId];
   const recoveredRoute = result?.recovery?.routes[shipmentId];
   const weightsTotal = Object.values(weights).reduce((sum, value) => sum + value, 0);
@@ -976,6 +1015,7 @@ function NetworkExplorer({
   const selectLocation = useCallback((location: NetworkResponse["nodes"][number]) => {
     setSelectedLocation(location);
   }, []);
+  const selectLink = useCallback((linkId: string) => setSelectedLinkId(linkId), []);
 
   useEffect(() => {
     if (selectedRouteId && routes.some((route) => route.id === selectedRouteId)) return;
@@ -1025,6 +1065,7 @@ function NetworkExplorer({
         scenario_id: scenarioId || null,
         weights,
         max_routes: 8,
+        shipment_ids: assignmentShipmentIds.length ? assignmentShipmentIds : [shipmentId],
       });
       setActiveRun(run);
       const updatedHistory = [run, ...history.filter((item) => item.id !== run.id)];
@@ -1103,12 +1144,36 @@ function NetworkExplorer({
 
   const changeScenario = (value: string) => {
     setScenarioId(value);
+    setDemoId((current) => {
+      const demo = demos.find((item) => item.id === current);
+      return demo && demo.scenario_id === (value || null) ? current : "";
+    });
     setActiveRun(null);
     setSelectedRouteId(null);
     setMovement(null);
     setDecisionAnswer(null);
     setElapsedTime(0);
     setPlaying(false);
+  };
+
+  const selectDemo = (value: string) => {
+    const demo = demos.find((item) => item.id === value);
+    if (!demo) return;
+    setDemoId(demo.id);
+    setAssignmentShipmentIds(demo.shipment_ids);
+    setShipmentId(demo.shipment_ids[0] ?? "");
+    changeScenario(demo.scenario_id ?? "");
+  };
+
+  const selectFocusShipment = (value: string) => {
+    setShipmentId(value);
+    const nextIds = assignmentShipmentIds.length > 1 && assignmentShipmentIds.includes(value) ? assignmentShipmentIds : [value];
+    setAssignmentShipmentIds(nextIds);
+    setDemoId((current) => {
+      const demo = demos.find((item) => item.id === current);
+      return demo && demo.shipment_ids.length === nextIds.length && demo.shipment_ids.every((id) => nextIds.includes(id)) ? current : "";
+    });
+    setSelectedRouteId(null);
   };
 
   const updateWeight = (key: keyof typeof weights, value: number) => {
@@ -1146,7 +1211,7 @@ function NetworkExplorer({
           >
             <option value="">Baseline network</option>
             {scenarios.map((item) => (
-              <option value={item.id} key={item.id}>{item.id}</option>
+              <option value={item.id} key={item.id}>{item.name || item.id}</option>
             ))}
           </select>
         </label>
@@ -1159,6 +1224,11 @@ function NetworkExplorer({
           className="global-map-panel"
         >
           <div className="map-toolbar">
+            <div className="map-geography-filters">
+              <label>Region<select aria-label="Map region" value={regionFilter} onChange={(event) => { setRegionFilter(event.target.value); setCountryFilter("all"); }}><option value="all">All regions</option>{regions.map((region) => <option key={region} value={region}>{region}</option>)}</select></label>
+              <label>Country<select aria-label="Map country" value={countryFilter} onChange={(event) => setCountryFilter(event.target.value)}><option value="all">All countries</option>{countries.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></label>
+              <div className="map-location-filters" aria-label="Location types">{([["port", "Ports"], ["airport", "Airports"], ["rail_terminal", "Rail terminals"], ["inland", "Inland hubs"]] as const).map(([key, label]) => <label key={key}><input type="checkbox" checked={locationTypeFilters.has(key)} onChange={() => setLocationTypeFilters((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })} />{label}</label>)}</div>
+            </div>
             <div className="graph-legend">
               {(["road", "rail", "sea", "air"] as const).map((mode) => (
                 <label key={mode} className="map-mode-filter">
@@ -1190,13 +1260,26 @@ function NetworkExplorer({
             linkUtilization={chosenRouteIsPlanned ? selectedPlan?.capacity_utilization ?? {} : {}}
             linkUsage={chosenRouteIsPlanned ? selectedPlan?.capacity_usage ?? {} : {}}
             capacityOverrides={scenario?.capacity_overrides ?? {}}
+            visibleLocationIds={visibleLocationIds}
+            visibleLinkIds={visibleLinkIds}
+            regionFilter={regionFilter}
+            countryFilter={countryFilter}
+            selectedLinkId={selectedLinkId}
             onSelectLocation={selectLocation}
+            onSelectLink={selectLink}
           />
           {selectedLocation && (
             <div className="location-inspector">
               <strong>{selectedLocation.label}</strong>
               <span>{[selectedLocation.kind.replaceAll("_", " "), selectedLocation.country_name, selectedLocation.region].filter(Boolean).join(" · ")}</span>
               <small>{selectedLocation.latitude?.toFixed(3)}, {selectedLocation.longitude?.toFixed(3)} · {selectedLocation.timezone ?? "time zone unavailable"}</small>
+            </div>
+          )}
+          {selectedLink && network && (
+            <div className="location-inspector corridor-inspector">
+              <strong>{network.nodes.find((node) => node.id === selectedLink.source)?.label} → {network.nodes.find((node) => node.id === selectedLink.target)?.label}</strong>
+              <span>{selectedLink.mode.toUpperCase()} corridor · {formatNumber(selectedLink.distance_km)} km · {formatNumber(selectedLink.transit_time)} {network.time_unit}</span>
+              <small>Capacity {selectedLink.capacity ?? "unbounded"} {selectedLink.capacity_unit} · synthetic fixed/per-unit cost {formatNumber(selectedLink.fixed_cost)} + {formatNumber(selectedLink.variable_cost_per_quantity_unit)} · synthetic carbon {formatNumber(selectedLink.carbon_per_quantity_unit)} {network.carbon_unit}/{network.quantity_unit}{scenario && disruptedLinkIds.includes(selectedLink.id) ? " · scenario modified" : ""}</small>
             </div>
           )}
           <div className="network-footnote">
@@ -1207,13 +1290,16 @@ function NetworkExplorer({
         <div className="global-network-side">
           <Panel title="Recovery optimization" subtitle="Classical bounded route generation and capacity-aware assignment">
             <div className="run-form global-run-form">
+              {demos.length > 0 && <label>Demonstration scenario<select aria-label="Global demonstration scenario" value={demoId} onChange={(event) => selectDemo(event.target.value)}>{demos.map((demo) => <option key={demo.id} value={demo.id}>{demo.name}</option>)}</select></label>}
+              {activeDemo && <div className="demo-brief"><strong>{activeDemo.business_problem}</strong><span>Illustrative alternatives: {activeDemo.alternatives.join(" · ")}</span><ul>{activeDemo.constraints.map((constraint) => <li key={constraint}>{constraint}</li>)}</ul><small>All routes and inputs are synthetic; search is bounded and does not model real schedules or border clearance.</small></div>}
               <label>
                 Shipment
-                <select value={shipmentId} onChange={(event) => { setShipmentId(event.target.value); setSelectedRouteId(null); }}>
+                <select aria-label="Shipment" value={shipmentId} onChange={(event) => selectFocusShipment(event.target.value)}>
                   {shipments.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.origin_name} → {item.destination_name}</option>)}
                 </select>
                 {shipment && <small>{shipment.quantity} {shipment.quantity_unit} · {shipment.cargo_category} · priority {shipment.priority}</small>}
               </label>
+              <label>Joint assignment shipments<select aria-label="Joint assignment shipments" multiple value={assignmentShipmentIds} onChange={(event) => { const ids = Array.from(event.target.selectedOptions, (option) => option.value); setAssignmentShipmentIds(ids); if (ids.length && !ids.includes(shipmentId)) setShipmentId(ids[0]); setDemoId((current) => { const demo = demos.find((item) => item.id === current); return demo && demo.shipment_ids.length === ids.length && demo.shipment_ids.every((id) => ids.includes(id)) ? current : ""; }); }} size={Math.min(5, shipments.length)}>{shipments.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.origin_name} → {item.destination_name}</option>)}</select><small>Assignment enumeration supports up to 8 shipments; capacities are shared across this selection.</small></label>
               <label>
                 Objective profile
                 <select aria-label="Objective profile" value={objectiveProfile} onChange={(event) => {

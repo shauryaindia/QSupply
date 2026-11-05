@@ -24,18 +24,57 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
         self.assertEqual(network.status_code, 200)
         body = network.json()
         self.assertTrue(body["synthetic"])
-        self.assertEqual(len(body["nodes"]), 32)
+        self.assertGreaterEqual(len(body["nodes"]), 70)
+        self.assertGreaterEqual(len(body["links"]), 120)
         self.assertTrue(
             all(node["latitude"] is not None and node["longitude"] is not None for node in body["nodes"])
         )
         self.assertTrue(all(link["geometry"] and link["distance_km"] for link in body["links"]))
         shipments = self.client.get("/api/v1/global/shipments").json()
-        self.assertEqual({shipment["id"] for shipment in shipments}, {"EXP-104", "EXP-205"})
+        self.assertEqual(len(shipments), 7)
+        self.assertTrue({"EXP-104", "EXP-205", "EXP-306", "EXP-407", "EXP-508", "EXP-609", "DOM-710"}.issubset({shipment["id"] for shipment in shipments}))
         self.assertTrue(all(shipment["synthetic"] for shipment in shipments))
+        demos = self.client.get("/api/v1/global/demos").json()
+        self.assertEqual(len(demos), 6)
+        self.assertTrue(all(demo["synthetic"] and demo["shipment_ids"] for demo in demos))
         self.assertEqual(
             self.client.get("/api/v1/global/scenarios").json()[0]["id"],
             "synthetic-suez-capacity-restriction",
         )
+        self.assertGreaterEqual(len(self.client.get("/api/v1/global/scenarios").json()), 9)
+
+    def test_all_global_demonstrations_execute_real_feasible_candidate_assignments(self):
+        demos = self.client.get("/api/v1/global/demos").json()
+        for demo in demos:
+            with self.subTest(demo=demo["id"]):
+                response = self.client.post(
+                    "/api/v1/global/optimizations",
+                    json={"scenario_id": demo["scenario_id"], "shipment_ids": demo["shipment_ids"]},
+                )
+                self.assertEqual(response.status_code, 201, response.text)
+                result = response.json()["result"]
+                self.assertEqual(result["shipment_ids"], demo["shipment_ids"])
+                self.assertTrue(result["baseline"]["routes"])
+                self.assertEqual(set(result["baseline"]["routes"]), set(demo["shipment_ids"]))
+                if demo["scenario_id"] is not None:
+                    self.assertTrue(result["recovery_feasible"], result["failure_reason"])
+                    self.assertEqual(set(result["recovery"]["routes"]), set(demo["shipment_ids"]))
+
+    def test_global_route_intelligence_supports_selected_assignment_scope(self):
+        response = self.client.post(
+            "/api/v1/global/route-intelligence",
+            json={
+                "shipment_id": "EXP-306",
+                "shipment_ids": ["EXP-306"],
+                "scenario_id": "synthetic-india-uae-combined-restriction",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["assignment_shipment_ids"], ["EXP-306"])
+        self.assertEqual(body["shipment_id"], "EXP-306")
+        self.assertTrue(body["recovery_feasible"])
+        self.assertTrue({tuple(route["modes"]) for route in body["routes"]} >= {("sea",), ("road", "air", "road")})
 
     def test_custom_scenario_persists_composes_overlays_and_is_snapshotted_in_runs(self):
         network = self.client.get("/api/v1/global/network").json()

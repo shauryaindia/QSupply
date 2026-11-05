@@ -8,14 +8,28 @@ and returns deterministic shipment positions for the map.
 
 ## Current scope
 
-`qsupply.network.global_demo` provides geocoded locations and directed road,
-rail, sea and air links spanning Asia, Europe, North America, South America,
-Africa and Oceania. Every location includes latitude/longitude, a location
-kind, country, region and IANA time zone. Links define distance in kilometres,
-transit time in days, synthetic fixed and per-load-unit cost, carbon in kgCO2e,
-capacity in `load_unit`, availability, a resilience-exposure score and route
-geometry. Shipment quantities are in `load_unit`; link use is the sum of the
-quantities assigned to routes containing that directed link.
+`qsupply.network.global_demo` provides a deterministic synthetic graph of 74
+geocoded locations and 122 directed links across 37 country/territory codes.
+It includes major gateways and inland hubs across Europe, Russia and Eurasia,
+East/Southeast/South Asia, the Middle East, North and South America, and
+Oceania. The current graph contains 37 ports, 15 airports, 9 rail terminals,
+and 13 city, warehouse or multimodal locations. These counts describe the
+curated demonstration graph, not production network coverage. Each location
+includes latitude/longitude, a kind, country, region and IANA time zone.
+Directed link records include mode, distance in kilometres, transit time in
+days, synthetic fixed and per-load-unit cost, synthetic carbon in kgCO2e,
+capacity in `load_unit`, availability, exposure and route geometry.
+
+Network records are declared as structured location, link, shipment, scenario
+and demo catalogs. The routing engine consumes the generic graph; adding a
+curated data record does not introduce country-specific routing logic. Sea
+links connect port nodes, air links connect airport nodes, road links have
+curved/waypoint geometry and are limited to the modeled land corridors, and
+rail links represent named synthetic corridors. Transfer feasibility is
+controlled by each location's supported `transfer_modes`; route validation
+checks every mode change against that transfer contract. The model counts
+transfers but currently has no separate terminal handling time or handling
+charge fields.
 
 The current CVRP-style network contract uses positive integer shipment
 quantities and integer capacities in the explicitly declared base unit. It
@@ -26,9 +40,16 @@ fractional data. For example, with a base unit of 0.25 tonne, a capacity of
 Inputs must not be rounded silently. A general QUBO capacity/slack-bit encoding
 is not part of this route-optimization vertical slice.
 
-All scenario data are labelled synthetic. The Suez example applies a capacity
-override and cost multiplier to a directed sea link. It does not model current
-geopolitics, congestion, schedules, live rates, actual cargo or port operations.
+All scenario data are labelled synthetic. The built-in scenario catalog
+contains Suez-area capacity/cost pressure, India–UAE combined capacity/cost/time
+pressure, a China–US port-link closure, Singapore customs delay, transatlantic
+rate/time pressure, India rail interruption with road capacity reduction,
+Frankfurt air-link disruption, Eurasian rail restrictions, and Mumbai road
+capacity reduction. These are reproducible what-if inputs. They do not model
+current geopolitics, regulatory border access, schedules, live rates, actual
+cargo, port operations or verified service reliability. In particular, the
+Russia/Eurasia rail edges are not a statement that a corridor is presently
+available or unrestricted.
 
 Candidate routes are generated with deterministic bounded best-first simple
 path search. Link availability, capacity, transport-mode transfers and maximum
@@ -63,10 +84,12 @@ relative to the baseline and is unavailable when that baseline metric is zero.
 Deadline slack is deadline minus modeled route transit time. Capacity use is
 shipment quantity divided by each finite link capacity, with the route maximum
 reported as its bottleneck utilization. The balanced route recommendation is a
-single-shipment ranking; `assignment_route_id` separately identifies the route
-selected by the joint assignment that checks shared capacity across all demo
-shipments. A recommended route is not called the joint plan unless these IDs
-match.
+single-shipment ranking; `assignment_route_id` identifies the selected route
+within the requested assignment scope. Route intelligence defaults to the
+focused shipment only. Callers may pass additional `shipment_ids` when they
+want that route recommendation evaluated against a multi-shipment assignment;
+the response lists the scope in `assignment_shipment_ids`. A route ranking is
+not called the joint plan unless its ID matches the assignment-selected ID.
 
 The balanced score is the configured weighted sum of normalized cost, time,
 carbon and exposure. Normalization references are generated once from the
@@ -100,6 +123,27 @@ route legs with units and assumptions. It contains no live external data.
 The dashboard's built-in profiles (balanced, cost priority, fastest delivery,
 lowest carbon, maximum resilience) are percentage presets. Custom weights are
 accepted only when they total 100.
+
+## Global demonstration scenarios
+
+`GET /api/v1/global/demos` returns six runnable examples: China–Germany
+mode trade-offs, India–UAE port versus air, China–US port disruption recovery,
+Singapore–Australia customs delay, Europe–North America trade-offs, and India
+domestic port-to-inland distribution. Each record gives its shipment IDs,
+business question, constraints, candidate alternative types, and optional
+preconfigured disruption ID. `POST /api/v1/global/optimizations` accepts an
+optional `shipment_ids` selection; omitted IDs preserve the legacy two-shipment
+default. The dashboard submits the selected demo shipment IDs to the same
+existing route generator, assignment evaluator and route validator. Baseline
+and scenario outputs are calculated at request time and persisted; the demo
+catalog does not contain hardcoded outcome metrics.
+
+The China–Germany sample exposes sea, air and rail-enabled route candidates;
+India–UAE compares sea with air plus road; China–US routes to Chicago can use
+transpacific sea plus inland rail or air plus rail; Singapore–Australia compares
+sea and air/road; Europe–North America compares sea and air/road; and the
+domestic India sample compares coastal road/sea with a road/rail route. Candidate
+availability is bounded and depends on scenario and the maximum route count.
 
 ## Persisted custom scenarios
 
@@ -167,3 +211,9 @@ geographic clustering, real shipment tracking, a global MILP/CP-SAT solver,
 general QUBO solving, Qiskit/QAOA or Fujitsu QARP integration. The implemented
 assignment planner is a bounded classical exact search over candidate routes,
 not a quantum solver and not a globally optimal network path guarantee.
+Road/rail alignments and ocean/air geometries are illustrative waypoint paths,
+not navigational routes or geospatially validated transport services. Carrier
+schedule, customs/border clearance, inter-terminal handling time/cost,
+transfer-fee accounting, actual emissions factors and country-specific
+operating restrictions remain unmodeled. OpenStreetMap provides only the
+background basemap; QSupply's synthetic route data are not fetched from it.

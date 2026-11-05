@@ -195,8 +195,12 @@ performance claims.
 The optional FastAPI adapter exposes the CVRP engine and a small global
 multimodal demonstration. The global workspace uses a deterministic synthetic
 network and shipment set to generate bounded candidate routes, compare a
-baseline assignment with a simulated corridor disruption, and report recovery
-feasibility and business metrics. It provides configurable normalized route
+baseline assignment with simulated corridor disruptions, and report recovery
+feasibility and business metrics. The global data catalog covers 74 synthetic
+locations and 122 directed links across the major trade regions, with six
+runnable international and domestic demonstration scenarios. The map supports
+regional, country, transport-mode and location-type filters plus corridor
+inspection. The service provides configurable normalized route
 rankings, deterministic route analysis and decision support, per-mode carbon
 breakdowns, saved custom disruption scenarios, and downloadable CSV/PDF reports
 for persisted runs. Custom scenarios support closures, unavailable locations,
