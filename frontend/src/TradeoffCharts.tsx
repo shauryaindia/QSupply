@@ -41,7 +41,7 @@ function Scatter({
           const selected = selectedRouteId === route.id;
           return <g key={route.id} className={selected ? "tradeoff-point selected" : "tradeoff-point"}>
             <circle cx={x(routeX)} cy={y(routeY)} r={selected ? 6 : 4} />
-            <title>{`Route ${index + 1}: ${routeX.toFixed(1)} cost units, ${routeY.toFixed(1)} ${field === "carbon_kg" ? "kgCO2e" : "days"}`}</title>
+            <title>{`Route ${index + 1}: ${routeX.toFixed(1)} cost units, ${routeY.toFixed(1)} ${field === "carbon_kg" ? "kg CO₂e" : "days"}`}</title>
           </g>;
         })}
         <text x={width / 2} y={height - 7} textAnchor="middle">{xLabel}</text>
@@ -64,6 +64,6 @@ export default function TradeoffCharts({
   if (routes.length < 2) return null;
   return <div className="tradeoff-chart-grid">
     <Scatter title="Cost versus delivery time" xLabel="Modeled total cost" yLabel="Transit days" routes={routes} analyses={analyses} selectedRouteId={selectedRouteId} field="transit_time" />
-    <Scatter title="Cost versus estimated carbon" xLabel="Modeled total cost" yLabel="kgCO2e estimate" routes={routes} analyses={analyses} selectedRouteId={selectedRouteId} field="carbon_kg" />
+    <Scatter title="Cost versus estimated carbon" xLabel="Modeled total cost" yLabel="kg CO₂e estimate" routes={routes} analyses={analyses} selectedRouteId={selectedRouteId} field="carbon_kg" />
   </div>;
 }

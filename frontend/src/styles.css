@@ -2060,7 +2060,7 @@ select {
 .panel-meta,
 .status-list small,
 .metric-detail {
-  font-size: 13px;
+  font-size: 14px;
 }
 .metric-card {
   min-height: 145px;
@@ -2092,7 +2092,7 @@ select {
 }
 table th {
   height: 43px;
-  font-size: 13px;
+  font-size: 14px;
 }
 table td {
   height: 49px;
@@ -2130,13 +2130,13 @@ table td {
 .recovery-status,
 .movement-readout,
 .movement-buttons label {
-  font-size: 13px;
+  font-size: 14px;
 }
 .weight-total {
-  font-size: 13px;
+  font-size: 14px;
 }
 .objective-weight-grid label {
-  font-size: 13px;
+  font-size: 14px;
 }
 .weight-input-wrap {
   height: 42px;
@@ -2671,10 +2671,10 @@ a:focus-visible {
 }
 
 .map-geography-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbfd; }
-.map-geography-filters > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.map-geography-filters > label { display: grid; gap: 4px; color: var(--muted); font-size: 14px; font-weight: 650; }
 .map-geography-filters select { min-width: 150px; max-width: 230px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; background: white; color: var(--ink); }
 .map-location-filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; min-height: 34px; }
-.map-location-filters label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
+.map-location-filters label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 14px; }
 .map-location-filters input { accent-color: var(--teal); }
 .corridor-inspector { border-left: 3px solid #0a9b8e; }
 .demo-brief { display: grid; gap: 7px; padding: 12px 14px; border: 1px solid #dce8ef; border-radius: 10px; background: #f5fafc; color: var(--ink); }
@@ -2688,4 +2688,128 @@ a:focus-visible {
   .map-geography-filters > label { flex: 1 1 130px; }
   .map-geography-filters select { width: 100%; min-width: 0; }
   .map-location-filters { flex: 1 1 100%; }
+}
+
+/* Resilient enterprise layouts for long labels, dense comparisons and tablets. */
+.panel,
+.panel-heading > div,
+.metric-card,
+.scenario-builder-card,
+.global-network-layout > *,
+.global-network-side > * {
+  min-width: 0;
+}
+
+.panel-heading h2,
+.page-heading h1,
+.metric-detail,
+.demo-brief,
+.saved-scenario-list,
+.scenario-change-list,
+.analysis-segment-highlights,
+.decision-answer {
+  overflow-wrap: anywhere;
+}
+
+.banner-info {
+  align-items: center;
+}
+
+.banner-info p {
+  flex: 1;
+  min-width: 0;
+}
+
+.demo-brief strong {
+  font-size: 15px;
+}
+
+.demo-brief span,
+.demo-brief small,
+.demo-brief ul {
+  font-size: 14px;
+}
+
+.context-help {
+  display: block;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.benchmark-chart:has(.single-measure) {
+  height: auto;
+  min-height: 0;
+}
+
+.single-measure {
+  justify-content: flex-start;
+  min-height: 62px;
+  padding: 14px 16px;
+  border: 1px solid #e3eaf0;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 14px;
+  line-height: 1.5;
+  flex-wrap: wrap;
+}
+
+.primary-button,
+.secondary-button,
+.text-button,
+.nav-item {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.nav-item {
+  flex-wrap: nowrap;
+}
+
+.nav-item > span:not(.nav-icon) {
+  white-space: nowrap;
+}
+
+.nav-soon {
+  display: none;
+}
+
+.metric-label {
+  max-width: calc(100% - 40px);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.compact-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.table-scroll {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 960px) and (min-width: 761px) {
+  .global-network-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .global-network-side > .panel:last-child {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .compact-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nav-item:not(.active) {
+    display: flex;
+  }
+
+  .nav-item,
+  .nav-item.active {
+    white-space: nowrap;
+  }
 }

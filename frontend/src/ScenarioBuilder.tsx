@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import type { GlobalOptimization } from "./api/client";
 import { api, formatNumber, type NetworkResponse } from "./api/client";
+import { readableUnit, scenarioDisplayName } from "./presentation";
 import type { components } from "./api/generated";
 
 type Scenario = components["schemas"]["NetworkScenario"];
@@ -135,7 +136,7 @@ export default function ScenarioBuilder({
     const link = network.links.find((item) => item.id === id);
     const source = network.nodes.find((item) => item.id === link?.source)?.label ?? link?.source;
     const target = network.nodes.find((item) => item.id === link?.target)?.label ?? link?.target;
-    return `${source} → ${target} · ${link?.mode} (${id})`;
+    return `${source} → ${target} · ${link?.mode ?? "unknown mode"}`;
   };
 
   return (
@@ -154,10 +155,10 @@ export default function ScenarioBuilder({
             <div className="scenario-link-editor">
               <label>Link for capacity/cost/time changes<select value={targetLink} onChange={(event) => setTargetLink(event.target.value)}>{network.links.map((link) => <option key={link.id} value={link.id}>{linkLabel(link.id)}</option>)}</select></label>
               <div className="scenario-form-grid scenario-number-grid">
-                <label>Capacity limit ({network.quantity_unit})<input type="number" min="0" max={network.links.find((link) => link.id === targetLink)?.capacity ?? undefined} value={capacity} onChange={(event) => setCapacity(event.target.value)} placeholder="No change" /></label>
+                <label>Capacity limit ({readableUnit(network.quantity_unit, "quantity")})<input type="number" min="0" max={network.links.find((link) => link.id === targetLink)?.capacity ?? undefined} value={capacity} onChange={(event) => setCapacity(event.target.value)} placeholder="No change" /></label>
                 <label>Freight cost multiplier<input type="number" min="1" step="0.01" value={costMultiplier} onChange={(event) => setCostMultiplier(event.target.value)} placeholder="e.g. 1.2" /></label>
                 <label>Transit time multiplier<input type="number" min="1" step="0.01" value={timeMultiplier} onChange={(event) => setTimeMultiplier(event.target.value)} placeholder="e.g. 1.15" /></label>
-                <label>Customs delay ({network.time_unit})<input type="number" min="0" step="0.1" value={customsDelay} onChange={(event) => setCustomsDelay(event.target.value)} placeholder="No change" /></label>
+                <label>Customs delay ({readableUnit(network.time_unit, "time")})<input type="number" min="0" step="0.1" value={customsDelay} onChange={(event) => setCustomsDelay(event.target.value)} placeholder="No change" /></label>
               </div>
               <button className="secondary-button" type="button" onClick={applyLinkChanges}>Add / update link changes</button>
               {Object.entries(linkChanges).length > 0 && <ul className="scenario-change-list">{Object.entries(linkChanges).map(([id, change]) => <li key={id}><span>{linkLabel(id)} · {Object.entries(change).map(([key, value]) => `${key} ${value}`).join(" · ")}</span><button type="button" aria-label={`Remove changes for ${id}`} onClick={() => setLinkChanges((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)))}>Remove</button></li>)}</ul>}
@@ -181,9 +182,9 @@ export default function ScenarioBuilder({
       <div className="scenario-builder-card scenario-comparison-card">
         <h2>Compare saved runs</h2>
         <p>Select up to two completed runs. Metrics come from their persisted baseline or jointly feasible scenario assignments.</p>
-        <div className="scenario-run-select">{completedRuns.map((run) => <label key={run.id}><input type="checkbox" checked={comparisonIds.includes(run.id)} onChange={() => switchComparison(run.id)} />{run.result?.scenario_snapshot?.name ?? run.result?.scenario_id ?? "Baseline"} · {run.id.slice(0, 8)}</label>)}</div>
-        {plans.length > 0 && <div className="table-scroll"><table><thead><tr><th>Run / scenario</th><th>Recovery</th><th>Total cost</th><th>Delivery time</th><th>Carbon estimate</th><th>Exposure</th></tr></thead><tbody>{plans.map(({ run, plan }) => <tr key={run.id}><td>{run.result?.scenario_snapshot?.name ?? run.result?.scenario_id ?? "Baseline"}</td><td>{run.scenario_id ? plan ? "Feasible" : "Infeasible" : "Baseline"}</td><td>{plan ? formatNumber(plan.metrics.total_cost, 1) : "—"} {network.cost_unit}</td><td>{plan ? formatNumber(plan.metrics.delivery_time) : "—"} {network.time_unit}</td><td>{plan ? formatNumber(plan.metrics.carbon_kg) : "—"} {network.carbon_unit} est.</td><td>{plan ? formatNumber(plan.metrics.resilience_exposure, 2) : "—"}</td></tr>)}</tbody></table></div>}
-        {plans.length === 2 && plans.every(({ plan }) => plan) && <div className="scenario-delta-grid"><div><span>Cost difference</span><strong>{formatNumber(plans[1].plan!.metrics.total_cost - plans[0].plan!.metrics.total_cost, 1)} {network.cost_unit}</strong><small>Second selected run minus first</small></div><div><span>Time difference</span><strong>{formatNumber(plans[1].plan!.metrics.delivery_time - plans[0].plan!.metrics.delivery_time)} {network.time_unit}</strong><small>Summed modeled shipment transit time</small></div><div><span>Carbon difference</span><strong>{formatNumber(plans[1].plan!.metrics.carbon_kg - plans[0].plan!.metrics.carbon_kg)} {network.carbon_unit}</strong><small>Synthetic estimate; second minus first</small></div></div>}
+        <div className="scenario-run-select">{completedRuns.map((run) => <label key={run.id}><input type="checkbox" checked={comparisonIds.includes(run.id)} onChange={() => switchComparison(run.id)} />{scenarioDisplayName(run)} · {run.id.slice(0, 8)}</label>)}</div>
+        {plans.length > 0 && <div className="table-scroll"><table><thead><tr><th>Run / scenario</th><th>Recovery</th><th>Total cost</th><th>Delivery time</th><th>Carbon estimate</th><th>Exposure</th></tr></thead><tbody>{plans.map(({ run, plan }) => <tr key={run.id}><td>{scenarioDisplayName(run)}</td><td>{run.scenario_id ? plan ? "Feasible" : "Infeasible" : "Baseline"}</td><td>{plan ? formatNumber(plan.metrics.total_cost, 1) : "—"} {readableUnit(network.cost_unit, "cost")}</td><td>{plan ? formatNumber(plan.metrics.delivery_time) : "—"} {readableUnit(network.time_unit, "time")}</td><td>{plan ? formatNumber(plan.metrics.carbon_kg) : "—"} {readableUnit(network.carbon_unit, "carbon")} est.</td><td>{plan ? formatNumber(plan.metrics.resilience_exposure, 2) : "—"}</td></tr>)}</tbody></table></div>}
+        {plans.length === 2 && plans.every(({ plan }) => plan) && <div className="scenario-delta-grid"><div><span>Cost difference</span><strong>{formatNumber(plans[1].plan!.metrics.total_cost - plans[0].plan!.metrics.total_cost, 1)} {readableUnit(network.cost_unit, "cost")}</strong><small>Second selected run minus first</small></div><div><span>Time difference</span><strong>{formatNumber(plans[1].plan!.metrics.delivery_time - plans[0].plan!.metrics.delivery_time)} {readableUnit(network.time_unit, "time")}</strong><small>Summed modeled shipment transit time</small></div><div><span>Carbon difference</span><strong>{formatNumber(plans[1].plan!.metrics.carbon_kg - plans[0].plan!.metrics.carbon_kg)} {readableUnit(network.carbon_unit, "carbon")}</strong><small>Synthetic estimate; second minus first</small></div></div>}
         {!completedRuns.length && <p className="scenario-empty">No completed runs yet. Run a baseline or saved scenario in the Network Explorer to compare results.</p>}
       </div>
       <p className="synthetic-note"><span>i</span><span>Scenario controls modify an immutable overlay. The baseline network is never rewritten. Capacity, cost and time comparisons remain based on the synthetic network inputs.</span></p>

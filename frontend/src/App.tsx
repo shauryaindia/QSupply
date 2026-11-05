@@ -11,6 +11,7 @@ import {
 import GlobalNetworkMap from "./GlobalNetworkMap";
 import ScenarioBuilder from "./ScenarioBuilder";
 import TradeoffCharts from "./TradeoffCharts";
+import { corridorDisplayName, readableUnit, scenarioDisplayName } from "./presentation";
 import {
   api,
   distanceChartValue,
@@ -69,7 +70,7 @@ const objectiveProfiles = {
 const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   overview: {
     title: "Control tower",
-    subtitle: "A live view of your QSupply optimization activity.",
+    subtitle: "A current view of saved QSupply runs and the synthetic network.",
   },
   workspace: {
     title: "Optimization workspace",
@@ -278,8 +279,11 @@ function Overview({
     counts[link.mode] = (counts[link.mode] ?? 0) + 1;
     return counts;
   }, {});
-  const maxUtilization = globalPlan
-    ? Math.max(0, ...Object.values(globalPlan.capacity_utilization))
+  const utilizationValues = globalPlan
+    ? Object.values(globalPlan.capacity_utilization)
+    : [];
+  const maxUtilization = utilizationValues.length
+    ? Math.max(...utilizationValues)
     : null;
   const exactLimit = capabilities?.exact_cvrp_customer_limit ?? 10;
   const chart = completed
@@ -328,7 +332,7 @@ function Overview({
         <MetricCard
           label="Sample shipment volume"
           value={String(globalShipments.reduce((sum, shipment) => sum + shipment.quantity, 0))}
-          detail={globalShipments[0]?.quantity_unit ?? "No unit configured"}
+          detail={globalShipments[0] ? readableUnit(globalShipments[0].quantity_unit, "quantity") : "No unit configured"}
           icon="▤"
           tone="green"
         />
@@ -337,19 +341,19 @@ function Overview({
       <div className="metric-grid unavailable-metrics">
         <MetricCard
           label="Latest plan cost"
-          value={globalPlan ? `${formatNumber(globalPlan.metrics.total_cost, 1)} ${network?.cost_unit ?? ""}` : "—"}
-          detail={latestGlobal ? globalPlanDetail : "Run the global recovery planner"}
+          value={globalPlan ? `${formatNumber(globalPlan.metrics.total_cost, 1)} ${readableUnit(network?.cost_unit ?? "", "cost")}` : "—"}
+          detail={globalPlan ? `Synthetic cost · ${globalPlanDetail}` : "Run the global recovery planner"}
           icon="$"
         />
         <MetricCard
           label="Planned delivery time"
-          value={globalPlan ? `${formatNumber(globalPlan.metrics.delivery_time)} ${network?.time_unit ?? ""}` : "—"}
+          value={globalPlan ? `${formatNumber(globalPlan.metrics.delivery_time)} ${readableUnit(network?.time_unit ?? "", "time")}` : "—"}
           detail={globalPlan ? "Sum of modeled shipment transit times" : "No completed global run"}
           icon="◷"
         />
         <MetricCard
           label="Estimated emissions"
-          value={globalPlan ? `${formatNumber(globalPlan.metrics.carbon_kg)} ${network?.carbon_unit ?? ""}` : "—"}
+          value={globalPlan ? `${formatNumber(globalPlan.metrics.carbon_kg)} ${readableUnit(network?.carbon_unit ?? "", "carbon")}` : "—"}
           detail="Synthetic mode factors · not regulatory reporting"
           icon="◇"
         />
@@ -448,7 +452,7 @@ function Overview({
           <div className="table-scroll"><table><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Recovery</th><th>Plan cost</th><th>Estimated carbon</th></tr></thead><tbody>
             {globalRuns.slice(0, 5).map((run) => {
               const plan = run.result?.recovery ?? run.result?.baseline;
-              return <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{run.scenario_id ?? "Baseline"}</td><td>{run.result ? (run.result.recovery_feasible ? "Feasible" : "Infeasible") : run.status}</td><td>{plan && network ? `${formatNumber(plan.metrics.total_cost, 1)} ${network.cost_unit}` : "—"}</td><td>{plan && network ? `${formatNumber(plan.metrics.carbon_kg)} ${network.carbon_unit} est.` : "—"}</td></tr>;
+              return <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{scenarioDisplayName(run)}</td><td>{run.result ? (run.result.recovery_feasible ? "Feasible" : "Infeasible") : run.status}</td><td>{plan && network ? `${formatNumber(plan.metrics.total_cost, 1)} ${readableUnit(network.cost_unit, "cost")}` : "—"}</td><td>{plan && network ? `${formatNumber(plan.metrics.carbon_kg)} ${readableUnit(network.carbon_unit, "carbon")} est.` : "—"}</td></tr>;
             })}
           </tbody></table></div>
         ) : <EmptyState title="No global runs yet" detail="Run the synthetic recovery workflow to populate this table." />}
@@ -781,7 +785,7 @@ function ResultDetails({ run }: { run: RunRecord }) {
           ),
         )}
       </div>
-      {result.exact_reference_distance_exact && (
+      {result.exact_reference_distance_exact != null && (
         <div className="exact-reference">
           <div>
             <span className="exact-star">✦</span>
@@ -801,7 +805,7 @@ function ResultDetails({ run }: { run: RunRecord }) {
           </div>
         </div>
       )}
-      {result.exact_reference_distance_exact && (
+      {result.exact_reference_distance_exact != null && (
         <div className="comparison-formula exact-formula">
           Optimality gap compares the final heuristic distance with the exact
           solver distance for the same instance.
@@ -1199,7 +1203,7 @@ function NetworkExplorer({
         <div>
           <Badge tone="warn">Synthetic demonstration data</Badge>
           <span className="network-units">
-            {network.quantity_unit} · {network.cost_unit} · {network.time_unit} · {network.carbon_unit}
+            {readableUnit(network.quantity_unit, "quantity")} · synthetic {readableUnit(network.cost_unit, "cost")} · {readableUnit(network.time_unit, "time")} · {readableUnit(network.carbon_unit, "carbon")}
           </span>
         </div>
         <label className="scenario-select">
@@ -1278,8 +1282,8 @@ function NetworkExplorer({
           {selectedLink && network && (
             <div className="location-inspector corridor-inspector">
               <strong>{network.nodes.find((node) => node.id === selectedLink.source)?.label} → {network.nodes.find((node) => node.id === selectedLink.target)?.label}</strong>
-              <span>{selectedLink.mode.toUpperCase()} corridor · {formatNumber(selectedLink.distance_km)} km · {formatNumber(selectedLink.transit_time)} {network.time_unit}</span>
-              <small>Capacity {selectedLink.capacity ?? "unbounded"} {selectedLink.capacity_unit} · synthetic fixed/per-unit cost {formatNumber(selectedLink.fixed_cost)} + {formatNumber(selectedLink.variable_cost_per_quantity_unit)} · synthetic carbon {formatNumber(selectedLink.carbon_per_quantity_unit)} {network.carbon_unit}/{network.quantity_unit}{scenario && disruptedLinkIds.includes(selectedLink.id) ? " · scenario modified" : ""}</small>
+              <span>{selectedLink.mode.toUpperCase()} corridor · {formatNumber(selectedLink.distance_km)} km · {formatNumber(selectedLink.transit_time)} {readableUnit(network.time_unit, "time")}</span>
+              <small>Capacity {selectedLink.capacity ?? "unbounded"} {readableUnit(selectedLink.capacity_unit, "quantity")} · synthetic fixed/per-unit cost {formatNumber(selectedLink.fixed_cost)} + {formatNumber(selectedLink.variable_cost_per_quantity_unit)} · synthetic carbon {formatNumber(selectedLink.carbon_per_quantity_unit)} {readableUnit(network.carbon_unit, "carbon")}/{readableUnit(network.quantity_unit, "quantity")}{scenario && disruptedLinkIds.includes(selectedLink.id) ? " · scenario modified" : ""}</small>
             </div>
           )}
           <div className="network-footnote">
@@ -1297,7 +1301,7 @@ function NetworkExplorer({
                 <select aria-label="Shipment" value={shipmentId} onChange={(event) => selectFocusShipment(event.target.value)}>
                   {shipments.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.origin_name} → {item.destination_name}</option>)}
                 </select>
-                {shipment && <small>{shipment.quantity} {shipment.quantity_unit} · {shipment.cargo_category} · priority {shipment.priority}</small>}
+                {shipment && <small>{shipment.quantity} {readableUnit(shipment.quantity_unit, "quantity")} · {shipment.cargo_category} · priority {shipment.priority}</small>}
               </label>
               <label>Joint assignment shipments<select aria-label="Joint assignment shipments" multiple value={assignmentShipmentIds} onChange={(event) => { const ids = Array.from(event.target.selectedOptions, (option) => option.value); setAssignmentShipmentIds(ids); if (ids.length && !ids.includes(shipmentId)) setShipmentId(ids[0]); setDemoId((current) => { const demo = demos.find((item) => item.id === current); return demo && demo.shipment_ids.length === ids.length && demo.shipment_ids.every((id) => ids.includes(id)) ? current : ""; }); }} size={Math.min(5, shipments.length)}>{shipments.map((item) => <option key={item.id} value={item.id}>{item.id} · {item.origin_name} → {item.destination_name}</option>)}</select><small>Assignment enumeration supports up to 8 shipments; capacities are shared across this selection.</small></label>
               <label>
@@ -1329,6 +1333,7 @@ function NetworkExplorer({
               <small className={weightsTotal === 100 ? "weight-total valid" : "weight-total invalid"}>
                 Objective weights: {weightsTotal}% {weightsTotal === 100 ? "· valid" : "· must total 100%"}
               </small>
+              <small className="context-help">Resilience reflects synthetic disruption exposure; it is not a probability of failure.</small>
               <button className="primary-button run-button" onClick={() => void createOptimization()} disabled={loading || weightsTotal !== 100 || shipments.length === 0}>
                 {loading ? "Running recovery optimization…" : "Run recovery optimization"}
               </button>
@@ -1359,7 +1364,7 @@ function NetworkExplorer({
                     <button className={`route-alternative ${selected ? "selected" : ""}`} key={route.id} onClick={() => setSelectedRouteId(route.id)} aria-pressed={selected}>
                       <span className="route-alternative-top"><strong>Route {index + 1}</strong>{recommended && <Badge tone="good">Best balanced route</Badge>}{routeIntelligence?.assignment_route_id === route.id && <Badge tone="blue">Joint assignment</Badge>}{planRoutes.some((item) => item.id === route.id) && <Badge tone="blue">Saved plan</Badge>}</span>
                       <span className="route-alternative-modes">{route.modes.join(" → ")} · {route.transfer_count} transfers · {route.legs.length} legs</span>
-                      <span className="route-alternative-metrics"><span>{formatNumber(analysis?.total_cost ?? route.freight_cost, 1)} {network.cost_unit}</span><span>{formatNumber(route.transit_time)} days</span><span>{formatNumber(route.carbon_kg)} kgCO₂e est.</span></span>
+                      <span className="route-alternative-metrics"><span>{formatNumber(analysis?.total_cost ?? route.freight_cost, 1)} {readableUnit(network.cost_unit, "cost")}</span><span>{formatNumber(route.transit_time)} {readableUnit(network.time_unit, "time")}</span><span>{formatNumber(route.carbon_kg)} {readableUnit(network.carbon_unit, "carbon")} est.</span></span>
                     </button>
                   );
                 })}
@@ -1370,7 +1375,7 @@ function NetworkExplorer({
             {routeIntelligence && baselineAnalysisRoute && <div className="carbon-target-panel">
               <strong>Carbon reduction target · selected shipment</strong>
               <label>Target reduction from baseline: {carbonReductionTarget}%<input aria-label="Carbon reduction target" type="range" min={0} max={80} step={5} value={carbonReductionTarget} onChange={(event) => setCarbonReductionTarget(Number(event.target.value))} /></label>
-              {carbonReductionTarget === 0 ? <p>Baseline emissions target selected; no reduction is required.</p> : carbonTargetRoute && baselineAnalysisCost !== null ? <p>Lowest modeled cost among generated routes meeting the target: {formatNumber(routeIntelligence.analyses[carbonTargetRoute.id]?.total_cost ?? carbonTargetRoute.freight_cost, 1)} {network.cost_unit} ({formatNumber((routeIntelligence.analyses[carbonTargetRoute.id]?.total_cost ?? carbonTargetRoute.freight_cost) - baselineAnalysisCost, 1)} vs baseline), {formatNumber(carbonTargetRoute.transit_time - baselineAnalysisRoute.transit_time)} {network.time_unit} versus baseline.</p> : <p>No generated candidate meets {carbonReductionTarget}% below baseline. Search is bounded to generated routes.</p>}
+              {carbonReductionTarget === 0 ? <p>Baseline emissions target selected; no reduction is required.</p> : carbonTargetRoute && baselineAnalysisCost !== null ? <p>Lowest modeled cost among generated routes meeting the target: {formatNumber(routeIntelligence.analyses[carbonTargetRoute.id]?.total_cost ?? carbonTargetRoute.freight_cost, 1)} {readableUnit(network.cost_unit, "cost")} ({formatNumber((routeIntelligence.analyses[carbonTargetRoute.id]?.total_cost ?? carbonTargetRoute.freight_cost) - baselineAnalysisCost, 1)} vs baseline), {formatNumber(carbonTargetRoute.transit_time - baselineAnalysisRoute.transit_time)} {readableUnit(network.time_unit, "time")} versus baseline.</p> : <p>No generated candidate meets {carbonReductionTarget}% below baseline. Search is bounded to generated routes.</p>}
             </div>}
           </Panel>
 
@@ -1389,31 +1394,31 @@ function NetworkExplorer({
                 Display route
                 <select aria-label="Displayed route" value={selectedRoute.id} onChange={(event) => setSelectedRouteId(event.target.value)}>
                   {routes.map((route, index) => (
-                    <option value={route.id} key={route.id}>{index === 0 && plannedRoute?.id === route.id ? "Selected plan" : `Alternative ${index + 1}`} · {route.modes.join(" / ")} · {formatNumber(route.transit_time)} days</option>
+                    <option value={route.id} key={route.id}>{index === 0 && plannedRoute?.id === route.id ? "Selected plan" : `Alternative ${index + 1}`} · {route.modes.join(" / ")} · {formatNumber(route.transit_time)} {readableUnit(network.time_unit, "time")}</option>
                   ))}
                 </select>
               </label>
             )}
             {baseRoute && (
               <div className="route-comparison-grid">
-                <div><small>Baseline</small><strong>{formatNumber(baseRoute.freight_cost, 1)} {network.cost_unit}</strong><span>{formatNumber(baseRoute.transit_time)} days · {formatNumber(baseRoute.carbon_kg)} kgCO₂e</span></div>
-                <div><small>Recovery</small><strong>{recoveredRoute ? `${formatNumber(recoveredRoute.freight_cost, 1)} ${network.cost_unit}` : "No feasible route"}</strong><span>{recoveredRoute ? `${formatNumber(recoveredRoute.transit_time)} days · ${formatNumber(recoveredRoute.carbon_kg)} kgCO₂e` : "No recovered assignment"}</span></div>
+                <div><small>Baseline</small><strong>{formatNumber(baseRoute.freight_cost, 1)} {readableUnit(network.cost_unit, "cost")}</strong><span>{formatNumber(baseRoute.transit_time)} {readableUnit(network.time_unit, "time")} · {formatNumber(baseRoute.carbon_kg)} {readableUnit(network.carbon_unit, "carbon")}</span></div>
+                <div><small>Recovery</small><strong>{recoveredRoute ? `${formatNumber(recoveredRoute.freight_cost, 1)} ${readableUnit(network.cost_unit, "cost")}` : "No feasible route"}</strong><span>{recoveredRoute ? `${formatNumber(recoveredRoute.transit_time)} ${readableUnit(network.time_unit, "time")} · ${formatNumber(recoveredRoute.carbon_kg)} ${readableUnit(network.carbon_unit, "carbon")}` : "No recovered assignment"}</span></div>
               </div>
             )}
             {result?.baseline.metrics && (
               <div className="plan-metrics-list">
-                <div><span>Freight cost</span><strong>{formatNumber(result.baseline.metrics.total_cost, 1)} → {formatNumber(result.recovery?.metrics.total_cost, 1)} {network.cost_unit}</strong></div>
-                <div><span>Delivery time</span><strong>{formatNumber(result.baseline.metrics.delivery_time)} → {formatNumber(result.recovery?.metrics.delivery_time)} {network.time_unit}</strong></div>
-                <div><span>Carbon</span><strong>{formatNumber(result.baseline.metrics.carbon_kg)} → {formatNumber(result.recovery?.metrics.carbon_kg)} {network.carbon_unit}</strong></div>
+                <div><span>Freight cost</span><strong>{formatNumber(result.baseline.metrics.total_cost, 1)} → {formatNumber(result.recovery?.metrics.total_cost, 1)} {readableUnit(network.cost_unit, "cost")}</strong></div>
+                <div><span>Delivery time</span><strong>{formatNumber(result.baseline.metrics.delivery_time)} → {formatNumber(result.recovery?.metrics.delivery_time)} {readableUnit(network.time_unit, "time")}</strong></div>
+                <div><span>Carbon</span><strong>{formatNumber(result.baseline.metrics.carbon_kg)} → {formatNumber(result.recovery?.metrics.carbon_kg)} {readableUnit(network.carbon_unit, "carbon")}</strong></div>
                 <div><span>Resilience exposure</span><strong>{formatNumber(result.baseline.metrics.resilience_exposure)} → {formatNumber(result.recovery?.metrics.resilience_exposure)}</strong></div>
-                <div><span>Delay penalties</span><strong>{formatNumber(result.baseline.metrics.delay_penalty, 1)} → {formatNumber(result.recovery?.metrics.delay_penalty, 1)} {network.cost_unit}</strong></div>
+                <div><span>Delay penalties</span><strong>{formatNumber(result.baseline.metrics.delay_penalty, 1)} → {formatNumber(result.recovery?.metrics.delay_penalty, 1)} {readableUnit(network.cost_unit, "cost")}</strong></div>
               </div>
             )}
             {result?.recovery && result.scenario_id && (
               <div className="scenario-delta-grid" aria-label="Baseline versus recovery changes">
-                <div><span>Cost impact</span><strong>{formatNumber(result.recovery.metrics.total_cost - result.baseline.metrics.total_cost, 1)} {network.cost_unit}</strong><small>{result.recovery.metrics.total_cost >= result.baseline.metrics.total_cost ? "additional cost" : "cost saved"} vs baseline</small></div>
-                <div><span>Delivery time</span><strong>{formatNumber(result.baseline.metrics.delivery_time - result.recovery.metrics.delivery_time)} {network.time_unit}</strong><small>{result.baseline.metrics.delivery_time >= result.recovery.metrics.delivery_time ? "saved" : "additional"} vs baseline</small></div>
-                <div><span>Carbon impact</span><strong>{formatNumber(result.baseline.metrics.carbon_kg - result.recovery.metrics.carbon_kg)} {network.carbon_unit}</strong><small>{result.baseline.metrics.carbon_kg >= result.recovery.metrics.carbon_kg ? "estimated reduction" : "estimated increase"} vs baseline</small></div>
+                <div><span>Cost impact</span><strong>{formatNumber(result.recovery.metrics.total_cost - result.baseline.metrics.total_cost, 1)} {readableUnit(network.cost_unit, "cost")}</strong><small>{result.recovery.metrics.total_cost >= result.baseline.metrics.total_cost ? "additional cost" : "cost saved"} vs baseline</small></div>
+                <div><span>Delivery time</span><strong>{formatNumber(result.baseline.metrics.delivery_time - result.recovery.metrics.delivery_time)} {readableUnit(network.time_unit, "time")}</strong><small>{result.baseline.metrics.delivery_time >= result.recovery.metrics.delivery_time ? "saved" : "additional"} vs baseline</small></div>
+                <div><span>Carbon impact</span><strong>{formatNumber(result.baseline.metrics.carbon_kg - result.recovery.metrics.carbon_kg)} {readableUnit(network.carbon_unit, "carbon")}</strong><small>{result.baseline.metrics.carbon_kg >= result.recovery.metrics.carbon_kg ? "estimated reduction" : "estimated increase"} vs baseline</small></div>
               </div>
             )}
             {result?.failure_reason && <div className="network-error">{result.failure_reason}</div>}
@@ -1422,18 +1427,18 @@ function NetworkExplorer({
                 <div className="analysis-eyebrow">DETERMINISTIC ROUTE INTELLIGENCE · NO LLM</div>
                 <h3>{selectedAnalysis.recommendation}</h3>
                 <div className="route-delta-strip">
-                  <div><span>Cost</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.cost_savings), 1)} {network.cost_unit}</strong><small>{selectedAnalysis.delta_vs_baseline.cost_savings >= 0 ? "saved" : "additional"} · {selectedAnalysis.delta_vs_baseline.cost_savings_percent === null ? "—" : `${formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.cost_savings_percent), 1)}%`}</small></div>
-                  <div><span>Time</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.time_savings_days))} {network.time_unit}</strong><small>{selectedAnalysis.delta_vs_baseline.time_savings_days >= 0 ? "saved" : "additional"}</small></div>
-                  <div><span>Carbon</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.carbon_savings_kg))} {network.carbon_unit}</strong><small>{selectedAnalysis.delta_vs_baseline.carbon_savings_kg >= 0 ? "estimated saved" : "estimated additional"}</small></div>
+                  <div><span>Cost</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.cost_savings), 1)} {readableUnit(network.cost_unit, "cost")}</strong><small>{selectedAnalysis.delta_vs_baseline.cost_savings >= 0 ? "saved" : "additional"} · {selectedAnalysis.delta_vs_baseline.cost_savings_percent === null ? "—" : `${formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.cost_savings_percent), 1)}%`}</small></div>
+                  <div><span>Time</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.time_savings_days))} {readableUnit(network.time_unit, "time")}</strong><small>{selectedAnalysis.delta_vs_baseline.time_savings_days >= 0 ? "saved" : "additional"}</small></div>
+                  <div><span>Carbon</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.carbon_savings_kg))} {readableUnit(network.carbon_unit, "carbon")}</strong><small>{selectedAnalysis.delta_vs_baseline.carbon_savings_kg >= 0 ? "estimated saved" : "estimated additional"}</small></div>
                 </div>
                 <div className="analysis-ranks">Rank: cost #{routeRankLabel("cost")} · time #{routeRankLabel("time")} · carbon #{routeRankLabel("carbon")} · resilience #{routeRankLabel("resilience")} · balanced #{routeRankLabel("balanced")}</div>
-                <div className="analysis-segment-highlights"><span>{selectedAnalysis.deadline_met === null ? "No shipment deadline configured" : selectedAnalysis.deadline_met ? `Deadline buffer: ${formatNumber(selectedAnalysis.deadline_slack_days)} days` : `Deadline miss: ${formatNumber(Math.abs(selectedAnalysis.deadline_slack_days ?? 0))} days`}</span><span>Largest cost leg: {selectedAnalysis.largest_cost_leg_id ?? "—"}</span><span>Largest carbon leg: {selectedAnalysis.largest_carbon_leg_id ?? "—"}</span></div>
-                <div className="carbon-mode-breakdown"><strong>Estimated carbon by mode</strong>{Object.entries(selectedAnalysis.carbon_by_mode_kg).map(([mode, value]) => <span key={mode}>{mode}: {formatNumber(value)} kgCO₂e</span>)}</div>
+                <div className="analysis-segment-highlights"><span>{selectedAnalysis.deadline_met === null ? "No shipment deadline configured" : selectedAnalysis.deadline_met ? `Deadline buffer: ${formatNumber(selectedAnalysis.deadline_slack_days)} days` : `Deadline miss: ${formatNumber(Math.abs(selectedAnalysis.deadline_slack_days ?? 0))} days`}</span><span>Largest cost corridor: {selectedAnalysis.largest_cost_leg_id ? corridorDisplayName(network, selectedAnalysis.largest_cost_leg_id) : "Unavailable"}</span><span>Largest carbon corridor: {selectedAnalysis.largest_carbon_leg_id ? corridorDisplayName(network, selectedAnalysis.largest_carbon_leg_id) : "Unavailable"}</span></div>
+                <div className="carbon-mode-breakdown"><strong>Estimated carbon by mode</strong>{Object.entries(selectedAnalysis.carbon_by_mode_kg).map(([mode, value]) => <span key={mode}>{mode}: {formatNumber(value)} {readableUnit(network.carbon_unit, "carbon")}</span>)}</div>
                 <div className="analysis-findings"><div><strong>Advantages</strong><ul>{selectedAnalysis.advantages.map((item) => <li key={item}>{item}</li>)}</ul></div><div><strong>Trade-offs</strong><ul>{selectedAnalysis.tradeoffs.map((item) => <li key={item}>{item}</li>)}</ul></div></div>
                 <div className="analysis-detail-grid">
-                  <div><strong>Cost drivers</strong><ul>{selectedAnalysis.cost_drivers.slice(0, 3).map((item) => <li key={item.link_id}>{item.link_id}: {formatNumber(item.value, 1)} {network.cost_unit}</li>)}</ul></div>
-                  <div><strong>Time drivers</strong><ul>{selectedAnalysis.time_drivers.slice(0, 3).map((item) => <li key={item.link_id}>{item.link_id}: {formatNumber(item.value)} {network.time_unit}</li>)}</ul></div>
-                  <div><strong>Carbon hotspots</strong><ul>{selectedAnalysis.carbon_hotspots.slice(0, 3).map((item) => <li key={item.link_id}>{item.link_id}: {formatNumber(item.value)} {network.carbon_unit}</li>)}</ul></div>
+                  <div><strong>Cost drivers</strong><ul>{selectedAnalysis.cost_drivers.slice(0, 3).map((item) => <li key={item.link_id}>{corridorDisplayName(network, item.link_id)}: {formatNumber(item.value, 1)} {readableUnit(network.cost_unit, "cost")}</li>)}</ul></div>
+                  <div><strong>Time drivers</strong><ul>{selectedAnalysis.time_drivers.slice(0, 3).map((item) => <li key={item.link_id}>{corridorDisplayName(network, item.link_id)}: {formatNumber(item.value)} {readableUnit(network.time_unit, "time")}</li>)}</ul></div>
+                  <div><strong>Carbon hotspots</strong><ul>{selectedAnalysis.carbon_hotspots.slice(0, 3).map((item) => <li key={item.link_id}>{corridorDisplayName(network, item.link_id)}: {formatNumber(item.value)} {readableUnit(network.carbon_unit, "carbon")}</li>)}</ul></div>
                   <div><strong>Constraints and recovery</strong><ul>{selectedAnalysis.feasibility_constraints.map((item) => <li key={item}>{item}</li>)}</ul><small>{selectedAnalysis.recovery_recommendation}</small></div>
                 </div>
                 <div className="model-limit-note">Transfer cost: {selectedAnalysis.transfer_cost_modelled ? "modeled" : "not modeled"} · handling cost: {selectedAnalysis.handling_cost_modelled ? "modeled" : "not modeled"} · transfers counted: {selectedAnalysis.transfer_count} · disruption exposure: {formatNumber(selectedAnalysis.disruption_exposure, 3)}</div>
@@ -1446,7 +1451,7 @@ function NetworkExplorer({
               {decisionAnswer && <div className="decision-answer"><strong>Deterministic decision support · no LLM</strong><p>{decisionAnswer.answer}</p><details><summary>View numerical source data</summary><pre>{JSON.stringify(decisionAnswer.source_data, null, 2)}</pre></details></div>}
             </form>}
             {selectedRoute && (
-              <div className="table-scroll route-leg-table"><table><thead><tr><th>Segment</th><th>Mode</th><th>Distance</th><th>Time</th><th>Cost</th><th>Carbon estimate</th><th>Shipment capacity use</th></tr></thead><tbody>{selectedRoute.legs.map((leg) => <tr key={leg.link_id}><td>{network.nodes.find((node) => node.id === leg.origin_id)?.label} → {network.nodes.find((node) => node.id === leg.destination_id)?.label}</td><td><span className={`mode-tag mode-${leg.mode}`}>{leg.mode}</span></td><td>{formatNumber(leg.distance_km)} km</td><td>{formatNumber(leg.transit_time)} days</td><td>{formatNumber(leg.freight_cost, 1)} {network.cost_unit}</td><td>{formatNumber(leg.carbon_kg)} kgCO₂e</td><td>{leg.capacity === null ? "Unbounded" : `${formatNumber(shipment?.quantity ?? 0)} / ${leg.capacity} ${network.quantity_unit} · ${formatNumber(((shipment?.quantity ?? 0) / leg.capacity) * 100, 1)}%`}</td></tr>)}</tbody></table></div>
+              <div className="table-scroll route-leg-table"><table><thead><tr><th>Segment</th><th>Mode</th><th>Distance</th><th>Time</th><th>Cost</th><th>Carbon estimate</th><th>Shipment capacity use</th></tr></thead><tbody>{selectedRoute.legs.map((leg) => <tr key={leg.link_id}><td>{network.nodes.find((node) => node.id === leg.origin_id)?.label} → {network.nodes.find((node) => node.id === leg.destination_id)?.label}</td><td><span className={`mode-tag mode-${leg.mode}`}>{leg.mode}</span></td><td>{formatNumber(leg.distance_km)} km</td><td>{formatNumber(leg.transit_time)} {readableUnit(network.time_unit, "time")}</td><td>{formatNumber(leg.freight_cost, 1)} {readableUnit(network.cost_unit, "cost")}</td><td>{formatNumber(leg.carbon_kg)} {readableUnit(network.carbon_unit, "carbon")}</td><td>{leg.capacity === null ? "Unbounded" : `${formatNumber(shipment?.quantity ?? 0)} / ${leg.capacity} ${readableUnit(network.quantity_unit, "quantity")} · ${formatNumber(((shipment?.quantity ?? 0) / leg.capacity) * 100, 1)}%`}</td></tr>)}</tbody></table></div>
             )}
             {!selectedRoute && !loading && <EmptyState title="No route option" detail="Choose a supported sample shipment or a less restrictive scenario." />}
           </Panel>
@@ -1462,7 +1467,7 @@ function NetworkExplorer({
                 <input aria-label="Simulation timeline" type="range" min={0} max={Math.max(1, plannedRoute.transit_time)} step={0.1} value={Math.min(elapsedTime, plannedRoute.transit_time)} onChange={(event) => { setElapsedTime(Number(event.target.value)); setPlaying(false); }} />
                 <div className="movement-readout">
                   <Badge tone={movement?.status === "delivered" ? "good" : "blue"}>{movement?.status?.replaceAll("_", " ") ?? "Loading position"}</Badge>
-                  <span>{movement?.current_mode ?? "—"} · {formatNumber(movement?.remaining_time)} {network.time_unit} remaining</span>
+                  <span>{movement?.current_mode ?? "—"} · {formatNumber(movement?.remaining_time)} {readableUnit(network.time_unit, "time")} remaining</span>
                   <small>Estimated arrival {movement ? new Date(movement.estimated_arrival).toLocaleString() : "—"}</small>
                 </div>
               </div>
@@ -1486,7 +1491,7 @@ function NetworkExplorer({
       <Panel title="Recent global optimization runs" subtitle="Persisted locally through the configured SQLite or PostgreSQL run store">
         {history.length ? (
           <div className="table-scroll"><table><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Status</th><th>Recovery</th><th>Cost</th></tr></thead><tbody>
-            {history.map((run) => <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{run.scenario_id ?? "Baseline"}</td><td><Badge tone={run.status === "completed" ? "good" : "bad"}>{run.status}</Badge></td><td>{run.result ? run.result.recovery_feasible ? "Feasible" : "Infeasible" : "—"}</td><td>{run.result ? `${formatNumber(run.result.recovery?.metrics.total_cost, 1)} ${network.cost_unit}` : "—"}</td></tr>)}
+            {history.map((run) => <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{scenarioDisplayName(run)}</td><td><Badge tone={run.status === "completed" ? "good" : "bad"}>{run.status}</Badge></td><td>{run.result ? run.result.recovery_feasible ? "Feasible" : "Infeasible" : "—"}</td><td>{run.result ? `${formatNumber(run.result.recovery?.metrics.total_cost, 1)} ${readableUnit(network.cost_unit, "cost")}` : "—"}</td></tr>)}
           </tbody></table></div>
         ) : <EmptyState title="No global optimization runs" detail="Run the recovery workspace to create the first persisted result." />}
       </Panel>
@@ -1542,7 +1547,7 @@ function Benchmarking({
           label="Exact references"
           value={String(
             comparable.filter(
-              (run) => run.result?.exact_reference_distance_exact,
+              (run) => run.result?.exact_reference_distance_exact != null,
             ).length,
           )}
           detail="Exact comparisons recorded"
@@ -1624,7 +1629,7 @@ function Benchmarking({
                         )}
                       </td>
                       <td>
-                        {run.result?.exact_reference_distance_exact
+                        {run.result?.exact_reference_distance_exact != null
                           ? `${formatDistance(run.result.exact_reference_distance_exact)} units`
                           : "Not measured"}
                       </td>
@@ -1634,11 +1639,9 @@ function Benchmarking({
                           : `${formatNumber(run.result.optimality_gap_percent)}%`}
                       </td>
                       <td>
-                        {formatNumber(
-                          (run.result?.elapsed_seconds ?? 0) * 1000,
-                          0,
-                        )}{" "}
-                        ms
+                        {run.result?.elapsed_seconds == null
+                          ? "—"
+                          : `${formatNumber(run.result.elapsed_seconds * 1000, 0)} ms`}
                       </td>
                       <td>
                         <button
@@ -1927,6 +1930,8 @@ export default function App() {
                   <button
                     key={item.id}
                     className={`nav-item ${page === item.id ? "active" : ""}`}
+                    aria-label={item.title}
+                    title={item.title}
                     onClick={() => setPage(item.id)}
                   >
                     <span className="nav-icon">{item.icon}</span>

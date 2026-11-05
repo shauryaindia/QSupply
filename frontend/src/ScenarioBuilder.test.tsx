@@ -84,9 +84,9 @@ describe("ScenarioBuilder", () => {
     await user.type(screen.getByLabelText("Scenario name"), "Port delay");
     await user.type(screen.getByLabelText("Description"), "Delay at origin port");
     await user.selectOptions(screen.getByRole("listbox", { name: /Close transport links/ }), "sea-1");
-    await user.type(screen.getByLabelText("Capacity limit (load_unit)"), "5");
+    await user.type(screen.getByLabelText("Capacity limit (load units)"), "5");
     await user.type(screen.getByLabelText("Freight cost multiplier"), "1.2");
-    await user.type(screen.getByLabelText("Customs delay (day)"), "2");
+    await user.type(screen.getByLabelText("Customs delay (days)"), "2");
     await user.click(screen.getByRole("button", { name: "Add / update link changes" }));
     await user.click(screen.getByRole("button", { name: "Save scenario" }));
     expect(api.createGlobalScenario).toHaveBeenCalledWith({
@@ -106,9 +106,9 @@ describe("ScenarioBuilder", () => {
   it("compares persisted feasible run results instead of invented scenario outputs", () => {
     render(<ScenarioBuilder network={network} scenarios={[savedScenario]} runs={[run("base", null, 100, 90), run("recovery", "custom-scenario-1", 115, 70)]} selectedScenarioId="" onScenariosChange={vi.fn()} onUseScenario={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox", { name: /Baseline/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /custom-scenario-1/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Custom Scenario 1/ }));
     expect(screen.getByText("15 EUR")).toBeInTheDocument();
-    expect(screen.getByText("-20 kgCO2e")).toBeInTheDocument();
+    expect(screen.getByText("-20 kg CO₂e")).toBeInTheDocument();
     expect(within(screen.getByRole("table")).getByText("Feasible")).toBeInTheDocument();
   });
 });
