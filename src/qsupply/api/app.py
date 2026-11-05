@@ -10,7 +10,8 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from qsupply import MAX_EXACT_CUSTOMERS
-from qsupply.network.global_demo import global_demo_shipments
+from qsupply.network.global_demo import global_demo_network, global_demo_scenario, global_demo_shipments
+from qsupply.network.models import DisruptionScenario
 from qsupply.network.planning import RecoverySearchLimitError
 
 from .global_service import (
@@ -20,10 +21,14 @@ from .global_service import (
     movement_for_result,
     run_global_optimization,
     route_intelligence,
+    scenario_response,
+    get_global_scenario,
     shipment_response,
+    answer_decision_question,
 )
 from .instances import get_cvrp_instance, list_cvrp_instances, synthetic_network_response
 from .run_service import execute_run
+from .reporting import global_report_pdf
 from .schemas import (
     CapabilitiesResponse,
     CandidateRouteResponse,
@@ -32,6 +37,9 @@ from .schemas import (
     GlobalOptimizationListResponse,
     GlobalOptimizationRecord,
     GlobalOptimizationRequest,
+    GlobalScenarioCreateRequest,
+    DecisionQuestionRequest,
+    DecisionAnswerResponse,
     GlobalRoutesRequest,
     GlobalShipment,
     InstanceSummary,
@@ -122,7 +130,7 @@ def create_app(
 
     @app.get("/api/v1/global/network", response_model=NetworkResponse, tags=["global-network"])
     def global_network() -> NetworkResponse:
-        return global_network_response()
+        return global_network_response(app.state.run_store)
 
     @app.get("/api/v1/global/shipments", response_model=list[GlobalShipment], tags=["global-network"])
     def global_shipments() -> list[GlobalShipment]:
@@ -145,7 +153,78 @@ def create_app(
         tags=["global-network"],
     )
     def global_scenarios() -> list[NetworkScenario]:
-        return global_network_response().scenarios
+        return global_network_response(app.state.run_store).scenarios
+
+    @app.post(
+        "/api/v1/global/scenarios",
+        response_model=NetworkScenario,
+        status_code=201,
+        tags=["global-network"],
+    )
+    def create_global_scenario(request: GlobalScenarioCreateRequest) -> NetworkScenario:
+        scenario_id = f"custom-{uuid4()}"
+        try:
+            scenario = DisruptionScenario(
+                id=scenario_id,
+                closed_link_ids=frozenset(request.closed_link_ids),
+                unavailable_location_ids=frozenset(request.unavailable_location_ids),
+                capacity_overrides=request.capacity_overrides,
+                cost_multipliers=request.cost_multipliers,
+                transit_time_multipliers=request.transit_time_multipliers,
+                transit_time_additions=request.transit_time_additions,
+            )
+            scenario.validate_for(global_demo_network())
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        stored = app.state.run_store.create_global_scenario(
+            scenario_id,
+            request.name.strip(),
+            request.description.strip(),
+            {
+                "closed_link_ids": sorted(scenario.closed_link_ids),
+                "unavailable_location_ids": sorted(scenario.unavailable_location_ids),
+                "capacity_overrides": dict(scenario.capacity_overrides),
+                "cost_multipliers": dict(scenario.cost_multipliers),
+                "transit_time_multipliers": dict(scenario.transit_time_multipliers),
+                "transit_time_additions": dict(scenario.transit_time_additions),
+            },
+        )
+        return scenario_response(
+            scenario,
+            name=stored["name"],
+            description=stored["description"],
+            custom=True,
+            created_at=stored["created_at"],
+        )
+
+    @app.get(
+        "/api/v1/global/scenarios/{scenario_id}",
+        response_model=NetworkScenario,
+        tags=["global-network"],
+    )
+    def get_global_scenario_detail(scenario_id: str) -> NetworkScenario:
+        if scenario_id == global_demo_scenario().id:
+            return global_network_response(app.state.run_store).scenarios[0]
+        stored = app.state.run_store.get_global_scenario(scenario_id)
+        if stored is None:
+            raise HTTPException(status_code=404, detail="Scenario was not found")
+        scenario = get_global_scenario(scenario_id, app.state.run_store)
+        assert scenario is not None
+        return scenario_response(
+            scenario,
+            name=stored["name"],
+            description=stored["description"],
+            custom=True,
+            created_at=stored["created_at"],
+        )
+
+    @app.delete("/api/v1/global/scenarios/{scenario_id}", status_code=204, tags=["global-network"])
+    def delete_global_scenario(scenario_id: str) -> Response:
+        if scenario_id == global_demo_scenario().id:
+            raise HTTPException(status_code=409, detail="The built-in scenario cannot be deleted")
+        if not app.state.run_store.delete_global_scenario(scenario_id):
+            raise HTTPException(status_code=404, detail="Scenario was not found")
+        return Response(status_code=204)
 
     @app.post(
         "/api/v1/global/routes",
@@ -155,7 +234,7 @@ def create_app(
     def global_routes(request: GlobalRoutesRequest) -> list[CandidateRouteResponse]:
         try:
             return generate_shipment_routes(
-                request.shipment_id, request.scenario_id, request.max_routes
+                request.shipment_id, request.scenario_id, request.max_routes, app.state.run_store
             )
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Shipment or scenario was not found") from error
@@ -176,6 +255,7 @@ def create_app(
                 request.scenario_id,
                 request.weights.model_dump(),
                 request.max_routes,
+                app.state.run_store,
             )
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Shipment or scenario was not found") from error
@@ -193,12 +273,16 @@ def create_app(
     ) -> GlobalOptimizationRecord:
         run_id = str(uuid4())
         weights = request.weights.model_dump()
+        if request.scenario_id is not None and get_global_scenario(
+            request.scenario_id, app.state.run_store
+        ) is None:
+            raise HTTPException(status_code=404, detail="Disruption scenario was not found")
         app.state.run_store.create_global_optimization(
             run_id, request.scenario_id, weights
         )
         try:
             result = run_global_optimization(
-                run_id, request.scenario_id, weights, request.max_routes
+                run_id, request.scenario_id, weights, request.max_routes, app.state.run_store
             )
             app.state.run_store.complete_global_optimization(run_id, result)
         except KeyError as error:
@@ -260,6 +344,7 @@ def create_app(
         writer.writerow(["Scenario", record["scenario_id"] or "baseline network"])
         writer.writerow(["Method", result["algorithm"]])
         writer.writerow(["Optimality scope", result["optimality_scope"]])
+        writer.writerow(["Scenario snapshot", json.dumps(result.get("scenario_snapshot"), sort_keys=True)])
         writer.writerow(["Objective weights", json.dumps(record["weights"], sort_keys=True)])
         writer.writerow(["Normalization references", json.dumps(result["normalization_references"], sort_keys=True)])
         writer.writerow([])
@@ -279,6 +364,19 @@ def create_app(
                 metrics["resilience_exposure"],
                 metrics["weighted_objective"],
             ])
+            if plan_name == "recovery":
+                baseline_metrics = result["baseline"]["metrics"]
+                writer.writerow(["Scenario delta vs baseline", "Metric", "Absolute difference"])
+                for metric, unit in (
+                    ("total_cost", record.get("cost_unit", "cost units")),
+                    ("delivery_time", "summed shipment-days"),
+                    ("carbon_kg", "kgCO2e estimate"),
+                ):
+                    before = baseline_metrics[metric]
+                    after = metrics[metric]
+                    difference = after - before
+                    percent = (100 * difference / before) if before else None
+                    writer.writerow(["recovery", f"{metric} ({unit})", difference, "percent change", percent])
             writer.writerow([])
             writer.writerow([f"{plan_name} route alternatives"])
             writer.writerow(["Shipment", "Route", "Selected", "Modes", "Distance km", "Transit days", "Freight cost", "Carbon estimate kgCO2e", "Resilience exposure", "Transfers"])
@@ -321,6 +419,50 @@ def create_app(
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="qsupply-{run_id}-report.csv"'},
         )
+
+    @app.get(
+        "/api/v1/global/optimizations/{run_id}/report.pdf",
+        response_class=Response,
+        tags=["global-optimization"],
+    )
+    def global_optimization_pdf_report(run_id: str) -> Response:
+        record = app.state.run_store.get_global_optimization(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Optimization run was not found")
+        if record["status"] != "completed" or record["result"] is None:
+            raise HTTPException(status_code=409, detail="Completed optimization result is not available")
+        return Response(
+            content=global_report_pdf(record),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="qsupply-{run_id}-report.pdf"'},
+        )
+
+    @app.post(
+        "/api/v1/global/optimizations/{run_id}/questions",
+        response_model=DecisionAnswerResponse,
+        tags=["decision-intelligence"],
+    )
+    def ask_about_optimization(
+        run_id: str, request: DecisionQuestionRequest
+    ) -> DecisionAnswerResponse:
+        record = app.state.run_store.get_global_optimization(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Optimization run was not found")
+        if record["status"] != "completed" or record["result"] is None:
+            raise HTTPException(status_code=409, detail="Completed optimization result is not available")
+        try:
+            return DecisionAnswerResponse.model_validate(
+                answer_decision_question(
+                    record,
+                    request.shipment_id,
+                    request.question,
+                    request.route_id,
+                )
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Shipment or route was not found in this run") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @app.get(
         "/api/v1/global/optimizations/{run_id}/shipments/{shipment_id}/position",

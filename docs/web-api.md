@@ -33,6 +33,13 @@ The OpenAPI document is served at `http://127.0.0.1:8000/openapi.json`.
   against the selected baseline, deadline/capacity indicators, mode-level
   synthetic carbon and deterministic rule-based explanations. It does not call
   an LLM.
+- `GET /api/v1/global/scenarios`, `POST /api/v1/global/scenarios`,
+  `GET /api/v1/global/scenarios/{scenario_id}`, and
+  `DELETE /api/v1/global/scenarios/{scenario_id}` list, persist, retrieve, and
+  delete custom synthetic network overlays. Saved scenarios combine closures,
+  unavailable locations, reduced capacities, freight and transit-time
+  multipliers, and additive transit delays. Completed runs retain their own
+  immutable scenario snapshot after a scenario is deleted.
 - `POST /api/v1/global/optimizations` persists and evaluates a baseline
   shipment-to-route assignment and, when requested, a disruption recovery
   assignment. `GET /api/v1/global/optimizations` and
@@ -41,6 +48,11 @@ The OpenAPI document is served at `http://127.0.0.1:8000/openapi.json`.
   returns deterministic simulated movement at the supplied elapsed time.
 - `GET /api/v1/global/optimizations/{run_id}/report.csv` exports the saved
   baseline/recovery metrics and selected route legs as a CSV report.
+- `GET /api/v1/global/optimizations/{run_id}/report.pdf` exports a PDF summary
+  from the persisted result.
+- `POST /api/v1/global/optimizations/{run_id}/questions` answers supported
+  questions using a deterministic provider and returns the numerical source
+  facts. No LLM is configured.
 - `POST /api/v1/runs` queues a real QSupply nearest-neighbour,
   nearest-neighbour + 2-opt, or exact CVRP solver run.
 - `GET /api/v1/runs` and `GET /api/v1/runs/{id}` return persistent run
@@ -57,7 +69,8 @@ If `DATABASE_URL` is set, the API uses PostgreSQL through Psycopg. Render's
 Schema changes are applied transactionally at first store use and tracked in
 `schema_migrations`. Version 1 creates the original run-history schema;
 version 2 adds a private request-input JSON column; version 3 creates global
-optimization run-history storage. Existing run records are preserved. Future
+optimization run-history storage; version 4 adds persisted custom global
+scenarios. Existing run records are preserved. Future
 database changes should add a new numbered migration rather than editing
 applied versions. Selecting PostgreSQL does not copy historical rows from a
 previous SQLite file; export/import that history separately before a production

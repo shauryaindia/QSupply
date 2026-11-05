@@ -99,9 +99,48 @@ route legs with units and assumptions. It contains no live external data.
 
 The dashboard's built-in profiles (balanced, cost priority, fastest delivery,
 lowest carbon, maximum resilience) are percentage presets. Custom weights are
-accepted only when they total 100. The demonstrated disruption catalog contains
-one fixed synthetic corridor scenario; arbitrary scenario creation and editing
-are not implemented.
+accepted only when they total 100.
+
+## Persisted custom scenarios
+
+`POST /api/v1/global/scenarios` saves a named synthetic overlay, and
+`GET /api/v1/global/scenarios` lists the built-in baseline plus saved overlays.
+Custom overlays may close directed links, mark locations unavailable, reduce
+link capacity, multiply freight cost or transit time, and add an absolute
+transit-time delay (for example, a synthetic customs delay). Multiple overlay
+types can be combined in one scenario. The API validates all references and
+prevents capacity overrides above the baseline capacity. Saved scenario inputs
+are immutable; make a revised scenario to preserve reproducibility. Deleting a
+scenario does not delete completed runs: each run stores the scenario input
+snapshot used for its result. The schema migration adds scenario storage without
+rewriting optimization history or the baseline network.
+
+The dashboard compares metrics from persisted completed runs; it does not
+generate comparison outcomes from unsaved or hypothetical scenarios. These
+scenarios remain synthetic what-if overlays, not live network conditions.
+
+## Decision support and reports
+
+Route intelligence now returns structured per-route segment costs, transit
+times, synthetic carbon by segment and mode, total distance, transfer count,
+capacity utilization, deadline slack, baseline deltas, constraints, and
+trade-off drivers. Route rankings are individual route comparisons; they do
+not override the joint shipment assignment's shared-capacity feasibility.
+Transfer and handling costs are explicitly marked as unmodeled because the
+current network data has no such inputs.
+
+`POST /api/v1/global/optimizations/{run_id}/questions` answers supported
+follow-up questions from the persisted run's numerical source data. The current
+provider is deterministic and rule-based; there is no LLM provider configured,
+and unsupported questions receive a bounded response rather than invented
+metrics. The response includes the source facts used. Optional LLM analysis is
+future work and must remain grounded in these computed facts.
+
+Carbon trade-off charts compare the actually generated candidate-route
+metrics. Carbon target analysis reports cost and time changes among those
+candidates; it is not an optimization guarantee. CSV and PDF reports are
+generated from persisted run records, include scenario snapshots, baseline and
+recovery metrics, routes, emissions summaries, and synthetic-data assumptions.
 
 ## Simulation
 

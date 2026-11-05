@@ -61,6 +61,7 @@ class _EffectiveLink:
     capacity: int | None
     cost_multiplier: float
     time_multiplier: float
+    time_addition: float
     rank_cost: float
     rank_time: float
     rank_carbon: float
@@ -117,14 +118,20 @@ def _effective_links(
             if scenario is not None
             else 1
         )
+        time_addition = (
+            scenario.transit_time_additions.get(link.id, 0)
+            if scenario is not None
+            else 0
+        )
         effective[link.id] = _EffectiveLink(
             link=link,
             capacity=capacity,
             cost_multiplier=float(cost_multiplier),
             time_multiplier=float(time_multiplier),
+            time_addition=float(time_addition),
             rank_cost=float(link.fixed_cost + link.variable_cost_per_quantity_unit * shipment.quantity)
             * float(cost_multiplier),
-            rank_time=float(link.transit_time) * float(time_multiplier),
+            rank_time=float(link.transit_time) * float(time_multiplier) + float(time_addition),
             rank_carbon=float(link.carbon_per_quantity_unit) * shipment.quantity,
         )
     return effective
@@ -168,7 +175,10 @@ def _route_from_links(
                 destination_id=link.destination_id,
                 mode=link.mode,
                 distance_km=float(link.distance_km),
-                transit_time=float(link.transit_time) * effective.time_multiplier,
+                transit_time=(
+                    float(link.transit_time) * effective.time_multiplier
+                    + effective.time_addition
+                ),
                 freight_cost=float(
                     (link.fixed_cost + link.variable_cost_per_quantity_unit * shipment.quantity)
                     * effective.cost_multiplier

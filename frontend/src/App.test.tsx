@@ -26,11 +26,16 @@ vi.mock("./api/client", async (importOriginal) => {
       globalNetwork: vi.fn(),
       globalShipments: vi.fn(),
       globalScenarios: vi.fn(),
+      createGlobalScenario: vi.fn(),
+      deleteGlobalScenario: vi.fn(),
       globalRoutes: vi.fn(),
       routeIntelligence: vi.fn(),
       globalOptimizations: vi.fn(),
       globalOptimization: vi.fn(),
       createGlobalOptimization: vi.fn(),
+      optimizationReport: vi.fn(),
+      optimizationPdfReport: vi.fn(),
+      askDecisionQuestion: vi.fn(),
       shipmentPosition: vi.fn(),
       runs: vi.fn(),
       run: vi.fn(),
@@ -134,8 +139,10 @@ beforeEach(() => {
     scenarios: [
       {
         id: "synthetic-suez-capacity-restriction",
+        name: "Synthetic Suez capacity restriction",
         description: "Synthetic corridor capacity scenario.",
         synthetic: true,
+        custom: false,
         closed_link_ids: [],
         unavailable_location_ids: [],
         capacity_overrides: { "sea-jebel-rotterdam": 3 },
@@ -145,7 +152,21 @@ beforeEach(() => {
     ],
   });
   vi.mocked(api.globalShipments).mockResolvedValue([]);
-  vi.mocked(api.globalScenarios).mockResolvedValue([]);
+  vi.mocked(api.globalScenarios).mockResolvedValue([
+    {
+      id: "synthetic-suez-capacity-restriction",
+      name: "Synthetic Suez capacity restriction",
+      description: "Synthetic corridor capacity scenario.",
+      synthetic: true,
+      custom: false,
+      closed_link_ids: [],
+      unavailable_location_ids: [],
+      capacity_overrides: { "sea-jebel-rotterdam": 3 },
+      cost_multipliers: {},
+      transit_time_multipliers: {},
+      transit_time_additions: {},
+    },
+  ]);
   vi.mocked(api.globalRoutes).mockResolvedValue([]);
   vi.mocked(api.routeIntelligence).mockRejectedValue(
     new Error("No route intelligence fixture configured"),
@@ -157,6 +178,13 @@ beforeEach(() => {
   vi.mocked(api.shipmentPosition).mockRejectedValue(
     new Error("No shipment position fixture configured"),
   );
+  vi.mocked(api.createGlobalScenario).mockRejectedValue(
+    new Error("No custom scenario fixture configured"),
+  );
+  vi.mocked(api.deleteGlobalScenario).mockResolvedValue(undefined);
+  vi.mocked(api.optimizationReport).mockRejectedValue(new Error("No CSV fixture configured"));
+  vi.mocked(api.optimizationPdfReport).mockRejectedValue(new Error("No PDF fixture configured"));
+  vi.mocked(api.askDecisionQuestion).mockRejectedValue(new Error("No decision answer fixture configured"));
   vi.mocked(api.runs).mockResolvedValue({ items: [] });
 });
 
@@ -379,6 +407,17 @@ describe("QSupply dashboard interactions", () => {
           deadline_slack_days: 5,
           balanced_score: 0.4,
           maximum_capacity_utilization: 2 / 3,
+          route_feasible: true,
+          feasibility_constraints: ["Individual link capacity checked."],
+          capacity_constraints: [{ link_id: "sea-jebel-rotterdam", quantity: 2, capacity: 3, utilization: 2 / 3 }],
+          transfer_count: 1,
+          transfer_cost_modelled: false,
+          handling_cost_modelled: false,
+          cost_drivers: [{ link_id: "sea-jebel-rotterdam", mode: "sea", value: 100, unit: "cost units" }],
+          time_drivers: [{ link_id: "sea-jebel-rotterdam", mode: "sea", value: 10, unit: "days" }],
+          carbon_hotspots: [{ link_id: "sea-jebel-rotterdam", mode: "sea", value: 10, unit: "kgCO2e estimate" }],
+          disruption_exposure: 0.1,
+          recovery_recommendation: "Selected by joint assignment.",
           carbon_by_mode_kg: { sea: 10 },
           largest_cost_leg_id: "sea-jebel-rotterdam",
           largest_carbon_leg_id: "sea-jebel-rotterdam",
@@ -396,6 +435,15 @@ describe("QSupply dashboard interactions", () => {
     } as RouteIntelligence);
     vi.mocked(api.globalShipments).mockResolvedValue([shipment]);
     vi.mocked(api.createGlobalOptimization).mockResolvedValue(optimization);
+    vi.mocked(api.askDecisionQuestion).mockResolvedValue({
+      run_id: optimization.id,
+      shipment_id: shipment.id,
+      route_id: route.id,
+      answer: "The synthetic carbon estimate is 10.00 kgCO2e.",
+      analysis_type: "deterministic_fact_lookup",
+      uses_llm: false,
+      source_data: { carbon_estimate_kgco2e: 10, route_id: route.id },
+    });
 
     render(<App />);
     await screen.findByRole("heading", { name: "Control tower", level: 1 });
@@ -414,6 +462,16 @@ describe("QSupply dashboard interactions", () => {
     expect(await screen.findByText("Recommended for the configured weighted profile.")).toBeInTheDocument();
     expect(screen.getByText("DETERMINISTIC ROUTE INTELLIGENCE · NO LLM")).toBeInTheDocument();
     expect(screen.getByText("Estimated carbon by mode")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download CSV report" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download PDF summary" })).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("e.g. What is driving its carbon estimate?"), "What is the carbon estimate?");
+    await user.click(screen.getByRole("button", { name: "Ask QSupply" }));
+    expect(await screen.findByText("The synthetic carbon estimate is 10.00 kgCO2e.")).toBeInTheDocument();
+    expect(api.askDecisionQuestion).toHaveBeenCalledWith(optimization.id, {
+      shipment_id: shipment.id,
+      route_id: route.id,
+      question: "What is the carbon estimate?",
+    });
     expect(screen.getByText("Shipment movement · simulated")).toBeInTheDocument();
   });
 
@@ -425,7 +483,7 @@ describe("QSupply dashboard interactions", () => {
       within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: /Network explorer/ }),
     );
     await user.selectOptions(await screen.findByLabelText("Objective profile"), "cost-priority");
-    expect(await screen.findByRole("spinbutton", { name: /cost/ })).toHaveValue(70);
+    expect(await screen.findByRole("spinbutton", { name: /^cost/ })).toHaveValue(70);
     expect(screen.getByRole("spinbutton", { name: /delivery time/ })).toHaveValue(10);
     expect(screen.getByRole("spinbutton", { name: /carbon/ })).toHaveValue(10);
     expect(screen.getByRole("spinbutton", { name: /resilience/ })).toHaveValue(10);

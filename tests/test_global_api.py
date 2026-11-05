@@ -37,6 +37,93 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
             "synthetic-suez-capacity-restriction",
         )
 
+    def test_custom_scenario_persists_composes_overlays_and_is_snapshotted_in_runs(self):
+        network = self.client.get("/api/v1/global/network").json()
+        response = self.client.post(
+            "/api/v1/global/scenarios",
+            json={
+                "name": "Port congestion with customs hold",
+                "description": "Synthetic what-if test",
+                "closed_link_ids": ["road-chicago-new-york"],
+                "unavailable_location_ids": ["sydney-port"],
+                "capacity_overrides": {"sea-singapore-colombo": 5},
+                "cost_multipliers": {"sea-singapore-colombo": 1.25},
+                "transit_time_multipliers": {"sea-singapore-colombo": 1.1},
+                "transit_time_additions": {"sea-singapore-colombo": 2.5},
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        scenario = response.json()
+        self.assertTrue(scenario["custom"])
+        self.assertEqual(scenario["name"], "Port congestion with customs hold")
+        scenarios = self.client.get("/api/v1/global/scenarios").json()
+        self.assertIn(scenario["id"], {item["id"] for item in scenarios})
+        # The original baseline network remains unchanged.
+        baseline_link = next(link for link in network["links"] if link["id"] == "sea-singapore-colombo")
+        self.assertEqual(baseline_link["capacity"], 8)
+        self.assertEqual(network["scenarios"][0]["id"], "synthetic-suez-capacity-restriction")
+
+        baseline_routes = self.client.post(
+            "/api/v1/global/routes", json={"shipment_id": "EXP-104", "max_routes": 8}
+        ).json()
+        scenario_routes_response = self.client.post(
+            "/api/v1/global/routes",
+            json={"shipment_id": "EXP-104", "scenario_id": scenario["id"], "max_routes": 8},
+        )
+        self.assertEqual(scenario_routes_response.status_code, 200)
+        scenario_routes = scenario_routes_response.json()
+        self.assertTrue(all("road-chicago-new-york" not in route["link_ids"] for route in scenario_routes))
+        route_id = next(
+            route["id"] for route in baseline_routes
+            if "sea-singapore-colombo" in route["link_ids"]
+        )
+        baseline_route = next(route for route in baseline_routes if route["id"] == route_id)
+        changed_route = next(route for route in scenario_routes if route["id"] == route_id)
+        baseline_leg = next(leg for leg in baseline_route["legs"] if leg["link_id"] == "sea-singapore-colombo")
+        changed_leg = next(leg for leg in changed_route["legs"] if leg["link_id"] == "sea-singapore-colombo")
+        self.assertAlmostEqual(changed_leg["transit_time"], baseline_leg["transit_time"] * 1.1 + 2.5)
+        self.assertAlmostEqual(changed_leg["freight_cost"], baseline_leg["freight_cost"] * 1.25)
+
+        run_response = self.client.post(
+            "/api/v1/global/optimizations", json={"scenario_id": scenario["id"]}
+        )
+        self.assertEqual(run_response.status_code, 201, run_response.text)
+        run = run_response.json()
+        self.assertEqual(run["result"]["scenario_snapshot"]["name"], scenario["name"])
+        self.assertEqual(run["result"]["scenario_snapshot"]["transit_time_additions"], {"sea-singapore-colombo": 2.5})
+
+        self.assertEqual(self.client.delete(f"/api/v1/global/scenarios/{scenario['id']}").status_code, 204)
+        restarted = TestClient(create_app(self.database))
+        with restarted:
+            self.assertEqual(restarted.get(f"/api/v1/global/scenarios/{scenario['id']}").status_code, 404)
+            saved = restarted.get(f"/api/v1/global/optimizations/{run['id']}").json()
+            self.assertEqual(saved["result"]["scenario_snapshot"]["name"], scenario["name"])
+
+    def test_invalid_and_infeasible_scenarios_are_reported_without_mutating_baseline(self):
+        invalid = self.client.post(
+            "/api/v1/global/scenarios",
+            json={"name": "Invalid capacity", "capacity_overrides": {"sea-jebel-rotterdam": 9}},
+        )
+        self.assertEqual(invalid.status_code, 422)
+        unknown = self.client.post(
+            "/api/v1/global/scenarios",
+            json={"name": "Unknown link", "closed_link_ids": ["not-a-link"]},
+        )
+        self.assertEqual(unknown.status_code, 422)
+        network = self.client.get("/api/v1/global/network").json()
+        blocked = self.client.post(
+            "/api/v1/global/scenarios",
+            json={"name": "All links closed", "closed_link_ids": [link["id"] for link in network["links"]]},
+        )
+        self.assertEqual(blocked.status_code, 201)
+        run = self.client.post(
+            "/api/v1/global/optimizations", json={"scenario_id": blocked.json()["id"]}
+        )
+        self.assertEqual(run.status_code, 201, run.text)
+        self.assertFalse(run.json()["result"]["recovery_feasible"])
+        self.assertIsNotNone(run.json()["result"]["baseline"])
+        self.assertIsNone(run.json()["result"]["recovery"])
+
     def test_route_generation_returns_validated_baseline_and_disrupted_options(self):
         request = {"shipment_id": "EXP-104", "max_routes": 8}
         baseline = self.client.post("/api/v1/global/routes", json=request)
@@ -88,6 +175,14 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
             )
             self.assertTrue(analysis["recommendation"])
             self.assertEqual(analysis["analysis_type"], "deterministic_rule_based")
+            self.assertTrue(analysis["route_feasible"])
+            self.assertTrue(analysis["capacity_constraints"])
+            self.assertEqual(
+                sorted([item["value"] for item in analysis["carbon_hotspots"]], reverse=True),
+                sorted((leg["carbon_kg"] for leg in route["legs"]), reverse=True),
+            )
+            self.assertFalse(analysis["transfer_cost_modelled"])
+            self.assertTrue(analysis["recovery_recommendation"])
         self.assertTrue(any("customs" in assumption.lower() for assumption in body["assumptions"]))
 
     def test_global_optimization_reallocates_capacity_and_persists_history(self):
@@ -118,10 +213,38 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
         self.assertIn("QSupply synthetic route comparison report", report.text)
         self.assertIn("Carbon estimate (kgCO2e)", report.text)
         self.assertIn("sea-jebel-rotterdam", report.text)
+        self.assertIn("Scenario delta vs baseline", report.text)
+        pdf = self.client.get(f"/api/v1/global/optimizations/{record['id']}/report.pdf")
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf.headers["content-type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF-1.4"))
+        self.assertIn(b"EXECUTIVE SUMMARY", pdf.content)
+        self.assertEqual(
+            self.client.get("/api/v1/global/optimizations/not-a-run/report.pdf").status_code,
+            404,
+        )
         self.assertEqual(
             self.client.get("/api/v1/global/optimizations/not-a-run/report.csv").status_code,
             404,
         )
+
+        question = self.client.post(
+            f"/api/v1/global/optimizations/{record['id']}/questions",
+            json={"shipment_id": "EXP-104", "question": "What is the carbon estimate?"},
+        )
+        self.assertEqual(question.status_code, 200, question.text)
+        self.assertFalse(question.json()["uses_llm"])
+        self.assertEqual(question.json()["analysis_type"], "deterministic_fact_lookup")
+        self.assertIn("kgCO2e", question.json()["answer"])
+        self.assertEqual(
+            question.json()["source_data"]["carbon_estimate_kgco2e"],
+            record["result"]["recovery"]["routes"]["EXP-104"]["carbon_kg"],
+        )
+        invalid_route_question = self.client.post(
+            f"/api/v1/global/optimizations/{record['id']}/questions",
+            json={"shipment_id": "EXP-104", "route_id": "not-a-route", "question": "Why?"},
+        )
+        self.assertEqual(invalid_route_question.status_code, 404)
 
         position_url = (
             f"/api/v1/global/optimizations/{record['id']}"

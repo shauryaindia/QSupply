@@ -53,6 +53,61 @@ class RouteExplanationProvider(Protocol):
         """Return advantages, trade-offs, and a recommendation from supplied facts."""
 
 
+class DecisionSupportProvider(Protocol):
+    """Adapter contract for deterministic or future LLM question answering."""
+
+    name: str
+    uses_llm: bool
+
+    def answer(self, question: str, numerical_facts: Mapping[str, object]) -> str:
+        """Answer from supplied computed facts without inventing values."""
+
+
+class DeterministicDecisionSupportProvider:
+    """Answer common follow-up questions directly from saved result facts."""
+
+    name = "deterministic_fact_lookup"
+    uses_llm = False
+
+    def answer(self, question: str, numerical_facts: Mapping[str, object]) -> str:
+        normalized = question.casefold()
+        cost = numerical_facts.get("total_cost")
+        time = numerical_facts.get("transit_time_days")
+        carbon = numerical_facts.get("carbon_estimate_kgco2e")
+        slack = numerical_facts.get("deadline_slack_days")
+        if any(term in normalized for term in ("cost", "expensive", "saving", "price")):
+            return (
+                f"The modeled total is {cost:.2f} cost units, including any configured delay penalty. "
+                "Segment freight costs are listed in the supplied source data."
+            )
+        if any(term in normalized for term in ("time", "fast", "delay", "deadline", "late")):
+            if slack is None:
+                return f"Modeled transit time is {time:.2f} days. This shipment has no configured deadline."
+            return (
+                f"Modeled transit time is {time:.2f} days with "
+                f"{abs(slack):.2f} days {'of slack' if slack >= 0 else 'past the deadline'}."
+            )
+        if any(term in normalized for term in ("carbon", "emission", "co2")):
+            return f"The synthetic carbon estimate is {carbon:.2f} kgCO2e; mode and segment values are in the source data."
+        if any(term in normalized for term in ("capacity", "load", "bottleneck")):
+            return "Individual link loads and capacity utilization are listed in the source data; shared capacity is checked by the joint assignment."
+        if any(term in normalized for term in ("transfer", "handling")):
+            return (
+                f"The route has {numerical_facts.get('transfer_count', 0)} mode transfers. "
+                "Transfer and handling charges are not modeled in this demonstration."
+            )
+        if any(term in normalized for term in ("risk", "resilience", "disruption", "exposure")):
+            return (
+                f"The modeled disruption exposure score is {numerical_facts.get('resilience_exposure', 0):.3f}. "
+                "It is a synthetic exposure score, not an empirical probability."
+            )
+        return (
+            "I can answer questions about the saved route's modeled cost, time, deadline, "
+            "carbon estimate, capacity, transfers, and disruption exposure. "
+            "The numeric source data is included with this answer."
+        )
+
+
 class DeterministicRouteExplanationProvider:
     """Explain computed route metrics with deterministic comparison rules."""
 
@@ -268,6 +323,66 @@ def analyze_route_alternatives(
             "deadline_slack_days": deadline_slack,
             "balanced_score": metric_values["balanced"][route.id],
             "maximum_capacity_utilization": max(utilizations) if utilizations else None,
+            "route_feasible": True,
+            "feasibility_constraints": [
+                "Every traversed link is available in the selected scenario.",
+                "Shipment quantity fits each individual link capacity.",
+                *(
+                    ["Modeled shipment deadline is met."]
+                    if deadline_slack is not None and deadline_slack >= 0
+                    else ["Modeled shipment deadline is missed; a late-delivery penalty is applied."]
+                    if deadline_slack is not None
+                    else ["No shipment deadline is configured."]
+                ),
+                "Shared capacity is feasible only when selected by the joint assignment.",
+            ],
+            "capacity_constraints": [
+                {
+                    "link_id": leg.link_id,
+                    "quantity": quantity,
+                    "capacity": leg.capacity,
+                    "utilization": quantity / leg.capacity,
+                }
+                for leg in route.legs
+                if leg.capacity is not None
+            ],
+            "transfer_count": route.transfer_count,
+            "transfer_cost_modelled": False,
+            "handling_cost_modelled": False,
+            "cost_drivers": [
+                {
+                    "link_id": leg.link_id,
+                    "mode": leg.mode.value,
+                    "value": leg.freight_cost,
+                    "unit": "cost units",
+                }
+                for leg in sorted(route.legs, key=lambda item: (-item.freight_cost, item.link_id))
+            ]
+            + (
+                [{"link_id": "deadline-penalty", "mode": None, "value": _delay_penalty(profile, route), "unit": "cost units"}]
+                if _delay_penalty(profile, route) > 0
+                else []
+            ),
+            "time_drivers": [
+                {
+                    "link_id": leg.link_id,
+                    "mode": leg.mode.value,
+                    "value": leg.transit_time,
+                    "unit": "days",
+                }
+                for leg in sorted(route.legs, key=lambda item: (-item.transit_time, item.link_id))
+            ],
+            "carbon_hotspots": [
+                {
+                    "link_id": leg.link_id,
+                    "mode": leg.mode.value,
+                    "value": leg.carbon_kg,
+                    "unit": "kgCO2e estimate",
+                }
+                for leg in sorted(route.legs, key=lambda item: (-item.carbon_kg, item.link_id))
+            ],
+            "disruption_exposure": float(route.resilience_exposure),
+            "recovery_recommendation": "Recovery capability is evaluated by the joint shipment assignment.",
             "carbon_by_mode_kg": carbon_by_mode,
             "largest_cost_leg_id": max(route.legs, key=lambda leg: leg.freight_cost).link_id if route.legs else None,
             "largest_carbon_leg_id": max(route.legs, key=lambda leg: leg.carbon_kg).link_id if route.legs else None,

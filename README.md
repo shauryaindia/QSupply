@@ -197,10 +197,13 @@ multimodal demonstration. The global workspace uses a deterministic synthetic
 network and shipment set to generate bounded candidate routes, compare a
 baseline assignment with a simulated corridor disruption, and report recovery
 feasibility and business metrics. It provides configurable normalized route
-rankings, a deterministic rule-based route explanation, per-mode carbon
-breakdowns and downloadable CSV reports for persisted runs. The map and product
-overview identify their inputs as synthetic. This is not a live logistics feed
-or a general global route optimizer. See
+rankings, deterministic route analysis and decision support, per-mode carbon
+breakdowns, saved custom disruption scenarios, and downloadable CSV/PDF reports
+for persisted runs. Custom scenarios support closures, unavailable locations,
+capacity reductions, freight/time multipliers and additive transit delays. The
+decision-support endpoint does not use an LLM. The map and product overview
+identify their inputs as synthetic. This is not a live logistics feed or a
+general global route optimizer. See
 [`docs/global-network.md`](docs/global-network.md) and
 [`docs/web-api.md`](docs/web-api.md) for assumptions, APIs and limitations.
 

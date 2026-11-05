@@ -2,9 +2,10 @@
 
 from datetime import datetime
 from enum import Enum
+from math import isfinite
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 
 class SolverId(str, Enum):
@@ -120,13 +121,45 @@ class NetworkLink(BaseModel):
 
 class NetworkScenario(BaseModel):
     id: str
+    name: str = ""
     description: str
     synthetic: bool = True
+    custom: bool = False
+    created_at: datetime | None = None
     closed_link_ids: list[str]
     unavailable_location_ids: list[str]
     capacity_overrides: dict[str, int]
     cost_multipliers: dict[str, float]
     transit_time_multipliers: dict[str, float]
+    transit_time_additions: dict[str, float] = Field(default_factory=dict)
+
+
+class GlobalScenarioCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+    closed_link_ids: list[str] = Field(default_factory=list, max_length=50)
+    unavailable_location_ids: list[str] = Field(default_factory=list, max_length=50)
+    capacity_overrides: dict[str, StrictInt] = Field(default_factory=dict, max_length=50)
+    cost_multipliers: dict[str, float] = Field(default_factory=dict, max_length=50)
+    transit_time_multipliers: dict[str, float] = Field(default_factory=dict, max_length=50)
+    transit_time_additions: dict[str, float] = Field(default_factory=dict, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_name_and_values(self) -> "GlobalScenarioCreateRequest":
+        if not self.name.strip():
+            raise ValueError("scenario name must be non-empty")
+        for label, values, minimum in (
+            ("cost multiplier", self.cost_multipliers, 1),
+            ("transit-time multiplier", self.transit_time_multipliers, 1),
+            ("transit-time addition", self.transit_time_additions, 0),
+        ):
+            if any(not isfinite(value) or value < minimum for value in values.values()):
+                raise ValueError(f"{label} values must be finite and at least {minimum}")
+        if any(isinstance(value, bool) or value < 0 for value in self.capacity_overrides.values()):
+            raise ValueError("capacity overrides must be non-negative integers")
+        return self
 
 
 class NetworkResponse(BaseModel):
@@ -240,6 +273,20 @@ class RouteDeltaResponse(BaseModel):
     carbon_savings_percent: float | None
 
 
+class RouteMetricContribution(BaseModel):
+    link_id: str
+    mode: str | None = None
+    value: float
+    unit: str
+
+
+class RouteCapacityConstraint(BaseModel):
+    link_id: str
+    quantity: int
+    capacity: int
+    utilization: float
+
+
 class RouteAnalysisResponse(BaseModel):
     route_id: str
     total_cost: float
@@ -248,6 +295,17 @@ class RouteAnalysisResponse(BaseModel):
     deadline_slack_days: float | None
     balanced_score: float
     maximum_capacity_utilization: float | None
+    route_feasible: bool
+    feasibility_constraints: list[str]
+    capacity_constraints: list[RouteCapacityConstraint]
+    transfer_count: int
+    transfer_cost_modelled: bool = False
+    handling_cost_modelled: bool = False
+    cost_drivers: list[RouteMetricContribution]
+    time_drivers: list[RouteMetricContribution]
+    carbon_hotspots: list[RouteMetricContribution]
+    disruption_exposure: float
+    recovery_recommendation: str
     carbon_by_mode_kg: dict[str, float]
     largest_cost_leg_id: str | None
     largest_carbon_leg_id: str | None
@@ -272,6 +330,24 @@ class RouteIntelligenceResponse(BaseModel):
     recovery_feasible: bool
     normalization_references: dict[str, float]
     assumptions: list[str]
+
+
+class DecisionQuestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shipment_id: str = Field(min_length=1)
+    question: str = Field(min_length=1, max_length=500)
+    route_id: str | None = None
+
+
+class DecisionAnswerResponse(BaseModel):
+    run_id: str
+    shipment_id: str
+    route_id: str
+    answer: str
+    analysis_type: str
+    uses_llm: bool
+    source_data: dict[str, Any]
 
 
 class PlanMetricsResponse(BaseModel):
@@ -305,6 +381,7 @@ class GlobalOptimizationResult(BaseModel):
     status: str
     synthetic: bool = True
     scenario_id: str | None
+    scenario_snapshot: NetworkScenario | None = None
     weights: ObjectiveWeightsInput
     normalization_references: ObjectiveReferencesResponse
     recovery_feasible: bool

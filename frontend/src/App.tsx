@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import GlobalNetworkMap from "./GlobalNetworkMap";
+import ScenarioBuilder from "./ScenarioBuilder";
+import TradeoffCharts from "./TradeoffCharts";
 import {
   api,
   distanceChartValue,
@@ -824,12 +826,18 @@ function NetworkExplorer({
   onRunsChange: (runs: GlobalOptimization[]) => void;
 }) {
   const [shipments, setShipments] = useState<GlobalShipment[]>([]);
+  const [scenarios, setScenarios] = useState<components["schemas"]["NetworkScenario"][]>(network?.scenarios ?? []);
   const [scenarioId, setScenarioId] = useState("");
   const [shipmentId, setShipmentId] = useState("");
   const [routeCandidates, setRouteCandidates] = useState<CandidateRoute[]>([]);
   const [routeIntelligence, setRouteIntelligence] = useState<RouteIntelligence | null>(null);
   const [routeRanking, setRouteRanking] = useState("balanced");
   const [reportLoading, setReportLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [decisionQuestion, setDecisionQuestion] = useState("");
+  const [decisionAnswer, setDecisionAnswer] = useState<components["schemas"]["DecisionAnswerResponse"] | null>(null);
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const [carbonReductionTarget, setCarbonReductionTarget] = useState(20);
   const [activeRun, setActiveRun] = useState<GlobalOptimization | null>(null);
   const [history, setHistory] = useState<GlobalOptimization[]>([]);
   const [weights, setWeights] = useState({
@@ -861,12 +869,14 @@ function NetworkExplorer({
     void Promise.all([
       api.globalShipments(),
       api.globalOptimizations(),
+      api.globalScenarios(),
     ])
-      .then(([shipmentResponse, historyResponse]) => {
+      .then(([shipmentResponse, historyResponse, scenarioResponse]) => {
         if (!active) return;
         setShipments(shipmentResponse);
         setShipmentId((current) => current || shipmentResponse[0]?.id || "");
         setHistory(historyResponse.items);
+        setScenarios(scenarioResponse);
         onRunsChange(historyResponse.items);
         setScenarioId((current) => current || network.scenarios[0]?.id || "");
       })
@@ -933,7 +943,7 @@ function NetworkExplorer({
     const index = routeIntelligence.rankings[category]?.indexOf(selectedRoute.id) ?? -1;
     return index < 0 ? "—" : String(index + 1);
   };
-  const scenario = network?.scenarios.find((item) => item.id === scenarioId);
+  const scenario = scenarios.find((item) => item.id === scenarioId);
   const disruptedLinkIds = scenario
     ? [...scenario.closed_link_ids, ...Object.keys(scenario.capacity_overrides)]
     : [];
@@ -941,6 +951,25 @@ function NetworkExplorer({
   const baseRoute = result?.baseline.routes[shipmentId];
   const recoveredRoute = result?.recovery?.routes[shipmentId];
   const weightsTotal = Object.values(weights).reduce((sum, value) => sum + value, 0);
+  const baselineAnalysisRoute = routeIntelligence?.baseline_route;
+  const baselineDelayPenalty = baselineAnalysisRoute && shipment
+    ? Math.max(0, baselineAnalysisRoute.transit_time - shipment.deadline) * shipment.delay_penalty_per_day
+    : 0;
+  const baselineAnalysisCost = baselineAnalysisRoute
+    ? baselineAnalysisRoute.freight_cost + baselineDelayPenalty
+    : null;
+  const carbonTargetLimit = baselineAnalysisRoute
+    ? baselineAnalysisRoute.carbon_kg * (1 - carbonReductionTarget / 100)
+    : null;
+  const carbonTargetRoute = carbonTargetLimit === null
+    ? null
+    : routes
+      .filter((route) => route.carbon_kg <= carbonTargetLimit)
+      .sort((left, right) =>
+        (routeIntelligence?.analyses[left.id]?.total_cost ?? left.freight_cost)
+        - (routeIntelligence?.analyses[right.id]?.total_cost ?? right.freight_cost)
+        || left.id.localeCompare(right.id),
+      )[0] ?? null;
   const chosenRouteIsPlanned = Boolean(
     plannedRoute && selectedRoute && plannedRoute.id === selectedRoute.id,
   );
@@ -988,6 +1017,7 @@ function NetworkExplorer({
     setLoading(true);
     setError(null);
     setMovement(null);
+    setDecisionAnswer(null);
     setElapsedTime(0);
     setPlaying(false);
     try {
@@ -1032,11 +1062,51 @@ function NetworkExplorer({
     }
   };
 
+  const downloadPdfReport = async () => {
+    if (!activeRun || activeRun.status !== "completed") return;
+    setPdfLoading(true);
+    setError(null);
+    try {
+      const blob = await api.optimizationPdfReport(activeRun.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `qsupply-${activeRun.id}-report.pdf`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not download the saved PDF report.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const askDecisionQuestion = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!activeRun || !selectedRoute || !decisionQuestion.trim()) return;
+    setDecisionLoading(true);
+    setError(null);
+    try {
+      setDecisionAnswer(await api.askDecisionQuestion(activeRun.id, {
+        shipment_id: shipmentId,
+        route_id: selectedRoute.id,
+        question: decisionQuestion,
+      }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not answer the route question.");
+    } finally {
+      setDecisionLoading(false);
+    }
+  };
+
   const changeScenario = (value: string) => {
     setScenarioId(value);
     setActiveRun(null);
     setSelectedRouteId(null);
     setMovement(null);
+    setDecisionAnswer(null);
     setElapsedTime(0);
     setPlaying(false);
   };
@@ -1075,7 +1145,7 @@ function NetworkExplorer({
             onChange={(event) => changeScenario(event.target.value)}
           >
             <option value="">Baseline network</option>
-            {network.scenarios.map((item) => (
+            {scenarios.map((item) => (
               <option value={item.id} key={item.id}>{item.id}</option>
             ))}
           </select>
@@ -1210,10 +1280,16 @@ function NetworkExplorer({
               </div>
             ) : <EmptyState title="No feasible route alternatives" detail={error ?? "The selected scenario currently produces no route candidates for this shipment."} />}
             {routeIntelligence && <small className="route-score-note">Balanced ranking uses normalized cost, delivery time, synthetic carbon and resilience exposure with fixed baseline references. Search is bounded to generated candidates.</small>}
+            <TradeoffCharts routes={routes} analyses={routeIntelligence?.analyses ?? {}} selectedRouteId={selectedRoute?.id ?? null} />
+            {routeIntelligence && baselineAnalysisRoute && <div className="carbon-target-panel">
+              <strong>Carbon reduction target · selected shipment</strong>
+              <label>Target reduction from baseline: {carbonReductionTarget}%<input aria-label="Carbon reduction target" type="range" min={0} max={80} step={5} value={carbonReductionTarget} onChange={(event) => setCarbonReductionTarget(Number(event.target.value))} /></label>
+              {carbonReductionTarget === 0 ? <p>Baseline emissions target selected; no reduction is required.</p> : carbonTargetRoute && baselineAnalysisCost !== null ? <p>Lowest modeled cost among generated routes meeting the target: {formatNumber(routeIntelligence.analyses[carbonTargetRoute.id]?.total_cost ?? carbonTargetRoute.freight_cost, 1)} {network.cost_unit} ({formatNumber((routeIntelligence.analyses[carbonTargetRoute.id]?.total_cost ?? carbonTargetRoute.freight_cost) - baselineAnalysisCost, 1)} vs baseline), {formatNumber(carbonTargetRoute.transit_time - baselineAnalysisRoute.transit_time)} {network.time_unit} versus baseline.</p> : <p>No generated candidate meets {carbonReductionTarget}% below baseline. Search is bounded to generated routes.</p>}
+            </div>}
           </Panel>
 
           <Panel title="Route plan" subtitle={result ? `Run ${activeRun?.id.slice(0, 8)} · ${result.algorithm}` : "Generate route options or run recovery optimization"}>
-            {activeRun?.status === "completed" && <button className="secondary-button report-download" onClick={() => void downloadReport()} disabled={reportLoading}>{reportLoading ? "Preparing report…" : "Download saved comparison CSV"}</button>}
+            {activeRun?.status === "completed" && <div className="report-actions"><button className="secondary-button report-download" onClick={() => void downloadReport()} disabled={reportLoading}>{reportLoading ? "Preparing CSV…" : "Download CSV report"}</button><button className="secondary-button report-download" onClick={() => void downloadPdfReport()} disabled={pdfLoading}>{pdfLoading ? "Preparing PDF…" : "Download PDF summary"}</button></div>}
             {result && (
               <div className="recovery-status">
                 <Badge tone={result.recovery_feasible ? "good" : "bad"}>
@@ -1268,9 +1344,21 @@ function NetworkExplorer({
                 <div className="analysis-segment-highlights"><span>{selectedAnalysis.deadline_met === null ? "No shipment deadline configured" : selectedAnalysis.deadline_met ? `Deadline buffer: ${formatNumber(selectedAnalysis.deadline_slack_days)} days` : `Deadline miss: ${formatNumber(Math.abs(selectedAnalysis.deadline_slack_days ?? 0))} days`}</span><span>Largest cost leg: {selectedAnalysis.largest_cost_leg_id ?? "—"}</span><span>Largest carbon leg: {selectedAnalysis.largest_carbon_leg_id ?? "—"}</span></div>
                 <div className="carbon-mode-breakdown"><strong>Estimated carbon by mode</strong>{Object.entries(selectedAnalysis.carbon_by_mode_kg).map(([mode, value]) => <span key={mode}>{mode}: {formatNumber(value)} kgCO₂e</span>)}</div>
                 <div className="analysis-findings"><div><strong>Advantages</strong><ul>{selectedAnalysis.advantages.map((item) => <li key={item}>{item}</li>)}</ul></div><div><strong>Trade-offs</strong><ul>{selectedAnalysis.tradeoffs.map((item) => <li key={item}>{item}</li>)}</ul></div></div>
+                <div className="analysis-detail-grid">
+                  <div><strong>Cost drivers</strong><ul>{selectedAnalysis.cost_drivers.slice(0, 3).map((item) => <li key={item.link_id}>{item.link_id}: {formatNumber(item.value, 1)} {network.cost_unit}</li>)}</ul></div>
+                  <div><strong>Time drivers</strong><ul>{selectedAnalysis.time_drivers.slice(0, 3).map((item) => <li key={item.link_id}>{item.link_id}: {formatNumber(item.value)} {network.time_unit}</li>)}</ul></div>
+                  <div><strong>Carbon hotspots</strong><ul>{selectedAnalysis.carbon_hotspots.slice(0, 3).map((item) => <li key={item.link_id}>{item.link_id}: {formatNumber(item.value)} {network.carbon_unit}</li>)}</ul></div>
+                  <div><strong>Constraints and recovery</strong><ul>{selectedAnalysis.feasibility_constraints.map((item) => <li key={item}>{item}</li>)}</ul><small>{selectedAnalysis.recovery_recommendation}</small></div>
+                </div>
+                <div className="model-limit-note">Transfer cost: {selectedAnalysis.transfer_cost_modelled ? "modeled" : "not modeled"} · handling cost: {selectedAnalysis.handling_cost_modelled ? "modeled" : "not modeled"} · transfers counted: {selectedAnalysis.transfer_count} · disruption exposure: {formatNumber(selectedAnalysis.disruption_exposure, 3)}</div>
                 {selectedAnalysis.maximum_capacity_utilization !== null && <small>Route bottleneck utilization: {formatNumber(selectedAnalysis.maximum_capacity_utilization * 100, 1)}% of the tightest leg capacity.</small>}
               </div>
             )}
+            {activeRun && selectedRoute && <form className="decision-question-form" onSubmit={(event) => void askDecisionQuestion(event)}>
+              <label>Ask about this saved route<input value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} maxLength={500} placeholder="e.g. What is driving its carbon estimate?" /></label>
+              <button className="secondary-button" type="submit" disabled={decisionLoading || !decisionQuestion.trim()}>{decisionLoading ? "Checking saved metrics…" : "Ask QSupply"}</button>
+              {decisionAnswer && <div className="decision-answer"><strong>Deterministic decision support · no LLM</strong><p>{decisionAnswer.answer}</p><details><summary>View numerical source data</summary><pre>{JSON.stringify(decisionAnswer.source_data, null, 2)}</pre></details></div>}
+            </form>}
             {selectedRoute && (
               <div className="table-scroll route-leg-table"><table><thead><tr><th>Segment</th><th>Mode</th><th>Distance</th><th>Time</th><th>Cost</th><th>Carbon estimate</th><th>Shipment capacity use</th></tr></thead><tbody>{selectedRoute.legs.map((leg) => <tr key={leg.link_id}><td>{network.nodes.find((node) => node.id === leg.origin_id)?.label} → {network.nodes.find((node) => node.id === leg.destination_id)?.label}</td><td><span className={`mode-tag mode-${leg.mode}`}>{leg.mode}</span></td><td>{formatNumber(leg.distance_km)} km</td><td>{formatNumber(leg.transit_time)} days</td><td>{formatNumber(leg.freight_cost, 1)} {network.cost_unit}</td><td>{formatNumber(leg.carbon_kg)} kgCO₂e</td><td>{leg.capacity === null ? "Unbounded" : `${formatNumber(shipment?.quantity ?? 0)} / ${leg.capacity} ${network.quantity_unit} · ${formatNumber(((shipment?.quantity ?? 0) / leg.capacity) * 100, 1)}%`}</td></tr>)}</tbody></table></div>
             )}
@@ -1299,6 +1387,15 @@ function NetworkExplorer({
           </Panel>
         </div>
       </div>
+
+      <ScenarioBuilder
+        network={network}
+        scenarios={scenarios}
+        runs={history}
+        selectedScenarioId={scenarioId}
+        onScenariosChange={setScenarios}
+        onUseScenario={changeScenario}
+      />
 
       <Panel title="Recent global optimization runs" subtitle="Persisted locally through the configured SQLite or PostgreSQL run store">
         {history.length ? (

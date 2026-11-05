@@ -377,6 +377,7 @@ class DisruptionScenario:
     capacity_overrides: Mapping[str, int] | None = None
     cost_multipliers: Mapping[str, Real] | None = None
     transit_time_multipliers: Mapping[str, Real] | None = None
+    transit_time_additions: Mapping[str, Real] | None = None
 
     def __post_init__(self) -> None:
         _name(self.id, "scenario ID")
@@ -419,6 +420,12 @@ class DisruptionScenario:
                 minimum=1,
             ),
         )
+        additions = _multiplier_mapping(
+            {} if self.transit_time_additions is None else self.transit_time_additions,
+            "transit-time addition",
+            minimum=0,
+        )
+        object.__setattr__(self, "transit_time_additions", additions)
 
     def validate_for(self, network: TransportationNetwork) -> None:
         """Check that scenario overrides refer to known, reducible resources."""
@@ -430,6 +437,7 @@ class DisruptionScenario:
             | set(self.capacity_overrides)
             | set(self.cost_multipliers)
             | set(self.transit_time_multipliers)
+            | set(self.transit_time_additions)
         ) - set(link_map)
         if unknown_links:
             raise ValueError(f"scenario references unknown links: {sorted(unknown_links)!r}")

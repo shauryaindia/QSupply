@@ -2355,3 +2355,317 @@ a:focus-visible {
 .comparison-heading strong {
   font-size: 15px;
 }
+
+.scenario-workspace {
+  display: grid;
+  gap: 16px;
+  margin: 18px 0;
+}
+.scenario-builder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.scenario-builder-card {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #e0e7ed;
+  border-radius: 11px;
+  background: #fff;
+}
+.scenario-builder-card h2 {
+  margin: 0;
+  color: #26394d;
+  font-size: 22px;
+}
+.scenario-builder-card > p {
+  margin: 8px 0 16px;
+  color: #607286;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.scenario-builder-card form {
+  display: grid;
+  gap: 13px;
+}
+.scenario-builder-card label {
+  display: grid;
+  gap: 6px;
+  color: #44566b;
+  font-size: 14px;
+  font-weight: 600;
+}
+.scenario-builder-card input:not([type="checkbox"]),
+.scenario-builder-card select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #d6e0e7;
+  border-radius: 7px;
+  background: #fff;
+  color: #283d51;
+  font-size: 14px;
+}
+.scenario-builder-card select[multiple] {
+  min-height: 125px;
+}
+.scenario-builder-card label small {
+  color: #64768a;
+  font-size: 13px;
+  font-weight: 400;
+}
+.scenario-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.scenario-link-editor {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #e5ebef;
+  border-radius: 9px;
+  background: #fafcfd;
+}
+.scenario-change-list,
+.saved-scenario-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scenario-change-list li,
+.saved-scenario-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid #e5ebef;
+  border-radius: 8px;
+  color: #40536a;
+  font-size: 13px;
+}
+.scenario-change-list li > span {
+  overflow-wrap: anywhere;
+}
+.saved-scenario-list li.active {
+  border-color: #5b9e94;
+  background: #f4faf8;
+}
+.saved-scenario-list li > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.saved-scenario-list strong {
+  color: #283d51;
+  font-size: 15px;
+}
+.saved-scenario-list small {
+  color: #64768a;
+  font-size: 13px;
+  white-space: normal;
+}
+.scenario-error {
+  margin: 0;
+  color: #a43c36;
+  font-size: 14px;
+}
+.scenario-comparison-card .scenario-run-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 14px;
+}
+.scenario-run-select label {
+  display: flex;
+  align-items: center;
+  grid-template-columns: unset;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid #e0e7ed;
+  border-radius: 7px;
+  background: #fafcfd;
+  font-size: 13px;
+  font-weight: 500;
+}
+.scenario-comparison-card table {
+  min-width: 760px;
+}
+.scenario-empty {
+  color: #607286;
+  font-size: 14px;
+}
+.scenario-workspace > .synthetic-note {
+  font-size: 14px;
+}
+.tradeoff-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.tradeoff-chart {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #e5ebef;
+  border-radius: 8px;
+  background: #fcfdfd;
+}
+.tradeoff-chart figcaption {
+  color: #34495e;
+  font-size: 14px;
+  font-weight: 650;
+}
+.tradeoff-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tradeoff-axis {
+  stroke: #9aa9b6;
+  stroke-width: 1;
+}
+.tradeoff-chart text {
+  fill: #627286;
+  font-size: 11px;
+}
+.tradeoff-point circle {
+  fill: #56a295;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.tradeoff-point.selected circle {
+  fill: #e29b42;
+  stroke: #805013;
+  stroke-width: 2;
+}
+.tradeoff-scale {
+  display: flex;
+  justify-content: space-between;
+  color: #627286;
+  font-size: 12px;
+}
+.carbon-target-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid #d9e8e4;
+  border-radius: 8px;
+  background: #f6fbfa;
+  color: #40556a;
+  font-size: 14px;
+}
+.carbon-target-panel label {
+  display: grid;
+  gap: 6px;
+}
+.carbon-target-panel input {
+  width: 100%;
+}
+.carbon-target-panel p {
+  margin: 0;
+  line-height: 1.5;
+}
+.analysis-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.analysis-detail-grid > div {
+  padding: 10px;
+  border: 1px solid #e1e9ed;
+  border-radius: 7px;
+  background: #fff;
+}
+.analysis-detail-grid strong {
+  color: #3b5065;
+  font-size: 14px;
+}
+.analysis-detail-grid ul {
+  margin: 6px 0 0;
+  padding-left: 17px;
+  color: #52667a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.analysis-detail-grid small,
+.model-limit-note {
+  display: block;
+  margin-top: 8px;
+  color: #627286;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.decision-question-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #e0e7ed;
+  border-radius: 9px;
+  background: #fbfcfd;
+}
+.decision-question-form label {
+  display: grid;
+  gap: 6px;
+  color: #44566b;
+  font-size: 14px;
+}
+.decision-question-form input {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #d6e0e7;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 14px;
+}
+.decision-answer {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border: 1px solid #d9e8e4;
+  border-radius: 8px;
+  background: #f6fbfa;
+  color: #43586d;
+  font-size: 14px;
+}
+.decision-answer p {
+  margin: 7px 0;
+  line-height: 1.5;
+}
+.decision-answer pre {
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .scenario-builder-grid,
+  .tradeoff-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 620px) {
+  .scenario-form-grid,
+  .analysis-detail-grid,
+  .decision-question-form {
+    grid-template-columns: 1fr;
+  }
+  .decision-question-form .decision-answer {
+    grid-column: 1;
+  }
+  .saved-scenario-list li {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}

@@ -36,6 +36,17 @@ type RouteIntelligenceRequest = paths["/api/v1/global/route-intelligence"]["post
   ? Body
   : never;
 
+type GlobalScenarioCreate = paths["/api/v1/global/scenarios"]["post"]["requestBody"] extends {
+  content: { "application/json": infer Body };
+}
+  ? Body
+  : never;
+type DecisionQuestion = paths["/api/v1/global/optimizations/{run_id}/questions"]["post"]["requestBody"] extends {
+  content: { "application/json": infer Body };
+}
+  ? Body
+  : never;
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -60,6 +71,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         : `Request failed (${response.status})`;
     throw new Error(message);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -87,6 +99,13 @@ export const api = {
   globalShipments: () => request<GlobalShipment[]>("/api/v1/global/shipments"),
   globalScenarios: () =>
     request<components["schemas"]["NetworkScenario"][]>("/api/v1/global/scenarios"),
+  createGlobalScenario: (input: GlobalScenarioCreate) =>
+    request<components["schemas"]["NetworkScenario"]>("/api/v1/global/scenarios", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteGlobalScenario: (id: string) =>
+    request<void>(`/api/v1/global/scenarios/${encodeURIComponent(id)}`, { method: "DELETE" }),
   globalRoutes: (input: GlobalRoutesRequest) =>
     request<CandidateRoute[]>("/api/v1/global/routes", {
       method: "POST",
@@ -105,6 +124,13 @@ export const api = {
     request<GlobalOptimization>(`/api/v1/global/optimizations/${encodeURIComponent(id)}`),
   optimizationReport: (id: string) =>
     requestBlob(`/api/v1/global/optimizations/${encodeURIComponent(id)}/report.csv`),
+  optimizationPdfReport: (id: string) =>
+    requestBlob(`/api/v1/global/optimizations/${encodeURIComponent(id)}/report.pdf`),
+  askDecisionQuestion: (id: string, input: DecisionQuestion) =>
+    request<components["schemas"]["DecisionAnswerResponse"]>(
+      `/api/v1/global/optimizations/${encodeURIComponent(id)}/questions`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
   createGlobalOptimization: (input: GlobalOptimizationRequest) =>
     request<GlobalOptimization>("/api/v1/global/optimizations", {
       method: "POST",

@@ -16,7 +16,10 @@ from qsupply.network.planning import (
     compare_recovery,
     simulate_movement,
 )
-from qsupply.network.insights import analyze_route_alternatives
+from qsupply.network.insights import (
+    DeterministicDecisionSupportProvider,
+    analyze_route_alternatives,
+)
 from qsupply.network.routing import (
     RouteLeg,
     generate_candidate_routes,
@@ -36,7 +39,42 @@ from .schemas import (
 )
 
 
-def global_network_response() -> NetworkResponse:
+def _scenario_inputs(scenario: DisruptionScenario) -> dict[str, Any]:
+    return {
+        "closed_link_ids": sorted(scenario.closed_link_ids),
+        "unavailable_location_ids": sorted(scenario.unavailable_location_ids),
+        "capacity_overrides": dict(scenario.capacity_overrides),
+        "cost_multipliers": dict(scenario.cost_multipliers),
+        "transit_time_multipliers": dict(scenario.transit_time_multipliers),
+        "transit_time_additions": dict(scenario.transit_time_additions),
+    }
+
+
+def scenario_response(
+    scenario: DisruptionScenario,
+    *,
+    name: str,
+    description: str,
+    custom: bool = False,
+    created_at=None,
+) -> NetworkScenario:
+    inputs = _scenario_inputs(scenario)
+    return NetworkScenario(
+        id=scenario.id,
+        name=name,
+        description=description,
+        synthetic=True,
+        custom=custom,
+        created_at=created_at,
+        **inputs,
+    )
+
+
+def _stored_scenario(record: dict[str, Any]) -> DisruptionScenario:
+    return DisruptionScenario(id=record["id"], **record["inputs"])
+
+
+def global_network_response(scenario_store=None) -> NetworkResponse:
     network = global_demo_network()
     scenario = global_demo_scenario()
     return NetworkResponse(
@@ -83,18 +121,24 @@ def global_network_response() -> NetworkResponse:
             for link in network.links
         ],
         scenarios=[
-            NetworkScenario(
-                id=scenario.id,
+            scenario_response(
+                scenario,
+                name="Synthetic Suez capacity restriction",
                 description=(
                     "Synthetic Suez corridor capacity restriction. This is a scenario "
                     "input, not a live disruption alert."
                 ),
-                closed_link_ids=sorted(scenario.closed_link_ids),
-                unavailable_location_ids=sorted(scenario.unavailable_location_ids),
-                capacity_overrides=dict(scenario.capacity_overrides),
-                cost_multipliers={key: float(value) for key, value in scenario.cost_multipliers.items()},
-                transit_time_multipliers={key: float(value) for key, value in scenario.transit_time_multipliers.items()},
-            )
+            ),
+            *(
+                scenario_response(
+                    _stored_scenario(record),
+                    name=record["name"],
+                    description=record["description"],
+                    custom=True,
+                    created_at=record["created_at"],
+                )
+                for record in (scenario_store.list_global_scenarios() if scenario_store else [])
+            ),
         ],
     )
 
@@ -128,13 +172,14 @@ def get_shipment_profile(shipment_id: str):
     return None
 
 
-def get_global_scenario(scenario_id: str | None) -> DisruptionScenario | None:
+def get_global_scenario(scenario_id: str | None, scenario_store=None) -> DisruptionScenario | None:
     if scenario_id is None:
         return None
     scenario = global_demo_scenario()
-    if scenario.id != scenario_id:
-        return None
-    return scenario
+    if scenario.id == scenario_id:
+        return scenario
+    record = scenario_store.get_global_scenario(scenario_id) if scenario_store else None
+    return _stored_scenario(record) if record else None
 
 
 def route_response(route: CandidateRoute) -> CandidateRouteResponse:
@@ -172,12 +217,12 @@ def route_response(route: CandidateRoute) -> CandidateRouteResponse:
 
 
 def generate_shipment_routes(
-    shipment_id: str, scenario_id: str | None, max_routes: int
+    shipment_id: str, scenario_id: str | None, max_routes: int, scenario_store=None
 ) -> list[CandidateRouteResponse]:
     profile = get_shipment_profile(shipment_id)
     if profile is None:
         raise KeyError(shipment_id)
-    scenario = get_global_scenario(scenario_id)
+    scenario = get_global_scenario(scenario_id, scenario_store)
     if scenario_id is not None and scenario is None:
         raise KeyError(scenario_id)
     network = global_demo_network()
@@ -226,8 +271,9 @@ def run_global_optimization(
     scenario_id: str | None,
     weights: dict[str, int],
     max_routes: int,
+    scenario_store=None,
 ) -> dict[str, Any]:
-    scenario = get_global_scenario(scenario_id)
+    scenario = get_global_scenario(scenario_id, scenario_store)
     if scenario_id is not None and scenario is None:
         raise KeyError(scenario_id)
     profiles = global_demo_shipments()
@@ -238,11 +284,38 @@ def run_global_optimization(
         ObjectiveWeights(**weights),
         max_routes=max_routes,
     )
+    stored_scenario = (
+        scenario_store.get_global_scenario(scenario.id)
+        if scenario is not None
+        and scenario.id != global_demo_scenario().id
+        and scenario_store is not None
+        else None
+    )
+    scenario_snapshot = (
+        scenario_response(
+            scenario,
+            name=(
+                "Synthetic Suez capacity restriction"
+                if stored_scenario is None
+                else stored_scenario["name"]
+            ),
+            description=(
+                "Built-in synthetic disruption"
+                if stored_scenario is None
+                else stored_scenario["description"]
+            ),
+            custom=stored_scenario is not None,
+            created_at=(stored_scenario["created_at"] if stored_scenario else None),
+        ).model_dump(mode="json")
+        if scenario is not None
+        else None
+    )
     return {
         "id": run_id,
         "status": "completed",
         "synthetic": True,
         "scenario_id": comparison.scenario_id,
+        "scenario_snapshot": scenario_snapshot,
         "weights": weights,
         "normalization_references": {
             "cost": comparison.normalization_references.cost,
@@ -270,11 +343,12 @@ def route_intelligence(
     scenario_id: str | None,
     weights: dict[str, int],
     max_routes: int,
+    scenario_store=None,
 ) -> RouteIntelligenceResponse:
     profile = get_shipment_profile(shipment_id)
     if profile is None:
         raise KeyError(shipment_id)
-    scenario = get_global_scenario(scenario_id)
+    scenario = get_global_scenario(scenario_id, scenario_store)
     if scenario_id is not None and scenario is None:
         raise KeyError(scenario_id)
     comparison = compare_recovery(
@@ -302,13 +376,31 @@ def route_intelligence(
         references,
         scenario_id=scenario_id,
     )
+    assignment_route_id = (
+        assignment.routes[shipment_id].id if assignment is not None else None
+    )
+    for route_id, analysis in analyses.items():
+        if scenario_id is None:
+            analysis["recovery_recommendation"] = (
+                "This route is part of the baseline joint assignment."
+                if assignment_route_id == route_id
+                else f"The baseline joint assignment selected {assignment_route_id}."
+            )
+        elif assignment_route_id is None:
+            analysis["recovery_recommendation"] = (
+                "No shared-capacity-feasible joint recovery was found over the generated candidates."
+            )
+        else:
+            analysis["recovery_recommendation"] = (
+                "Selected by the joint recovery assignment."
+                if assignment_route_id == route_id
+                else f"The joint recovery assignment selected {assignment_route_id}."
+            )
     return RouteIntelligenceResponse(
         shipment_id=shipment_id,
         scenario_id=scenario_id,
         recommended_route_id=recommended_id,
-        assignment_route_id=(
-            assignment.routes[shipment_id].id if assignment is not None else None
-        ),
+        assignment_route_id=assignment_route_id,
         baseline_route=route_response(baseline_route),
         routes=[route_response(route) for route in options],
         rankings=rankings,
@@ -353,6 +445,105 @@ def movement_for_result(
         "shipment_id": shipment_id,
         **movement,
         "time_unit": global_demo_network().time_unit,
+    }
+
+
+def answer_decision_question(
+    record: dict[str, Any], shipment_id: str, question: str, route_id: str | None = None
+) -> dict[str, Any]:
+    result = record.get("result")
+    if not result:
+        raise ValueError("completed optimization result is not available")
+    profile = get_shipment_profile(shipment_id)
+    if profile is None:
+        raise KeyError(shipment_id)
+    routes: dict[str, dict[str, Any]] = {}
+    for plan_name in ("baseline", "recovery"):
+        plan = result.get(plan_name)
+        if not plan:
+            continue
+        selected = plan.get("routes", {}).get(shipment_id)
+        if selected:
+            routes[selected["id"]] = selected
+        for alternative in plan.get("alternatives", {}).get(shipment_id, []):
+            routes[alternative["id"]] = alternative
+    if route_id is None:
+        route = (result.get("recovery") or {}).get("routes", {}).get(shipment_id)
+        route = route or result.get("baseline", {}).get("routes", {}).get(shipment_id)
+    else:
+        route = routes.get(route_id)
+    if route is None:
+        raise KeyError(route_id or shipment_id)
+
+    deadline = profile.request.deadline
+    delay_days = (
+        max(0.0, float(route["transit_time"]) - float(deadline))
+        if deadline is not None
+        else 0.0
+    )
+    delay_penalty = delay_days * float(profile.delay_penalty_per_day)
+    baseline_route = result.get("baseline", {}).get("routes", {}).get(shipment_id)
+    baseline_cost = None
+    if baseline_route:
+        baseline_delay = (
+            max(0.0, float(baseline_route["transit_time"]) - float(deadline))
+            if deadline is not None
+            else 0.0
+        )
+        baseline_cost = float(baseline_route["freight_cost"]) + baseline_delay * float(profile.delay_penalty_per_day)
+    carbon_by_mode: dict[str, float] = {}
+    capacities = []
+    for leg in route["legs"]:
+        carbon_by_mode[leg["mode"]] = carbon_by_mode.get(leg["mode"], 0.0) + float(leg["carbon_kg"])
+        if leg.get("capacity") is not None:
+            capacities.append({
+                "link_id": leg["link_id"],
+                "quantity": profile.request.quantity,
+                "capacity": leg["capacity"],
+                "utilization": profile.request.quantity / leg["capacity"] if leg["capacity"] else None,
+            })
+    slack = None if deadline is None else float(deadline) - float(route["transit_time"])
+    source_data = {
+        "scenario_snapshot": result.get("scenario_snapshot"),
+        "route_id": route["id"],
+        "freight_cost": float(route["freight_cost"]),
+        "delay_penalty": delay_penalty,
+        "total_cost": float(route["freight_cost"]) + delay_penalty,
+        "cost_savings_vs_baseline": (
+            baseline_cost - float(route["freight_cost"]) - delay_penalty
+            if baseline_cost is not None
+            else None
+        ),
+        "transit_time_days": float(route["transit_time"]),
+        "deadline_slack_days": slack,
+        "time_savings_vs_baseline_days": (
+            float(baseline_route["transit_time"]) - float(route["transit_time"])
+            if baseline_route
+            else None
+        ),
+        "carbon_estimate_kgco2e": float(route["carbon_kg"]),
+        "carbon_by_mode_kgco2e": carbon_by_mode,
+        "carbon_savings_vs_baseline_kgco2e": (
+            float(baseline_route["carbon_kg"]) - float(route["carbon_kg"])
+            if baseline_route
+            else None
+        ),
+        "distance_km": float(route["distance_km"]),
+        "transfer_count": int(route["transfer_count"]),
+        "resilience_exposure": float(route["resilience_exposure"]),
+        "capacity_constraints": capacities,
+        "legs": route["legs"],
+        "recovery_feasible": result["recovery_feasible"],
+    }
+    provider = DeterministicDecisionSupportProvider()
+    return {
+        "run_id": record["id"],
+        "shipment_id": shipment_id,
+        "route_id": route["id"],
+        "answer": provider.answer(question, source_data),
+        "analysis_type": provider.name,
+        "uses_llm": provider.uses_llm,
+        "source_data": source_data,
     }
 
 

@@ -87,6 +87,28 @@ class TestMultimodalRouteGeneration(unittest.TestCase):
         self.assertTrue(all("sea-jebel-rotterdam" not in {leg.link_id for leg in route.legs} for route in routes))
         self.assertTrue(any(TransportMode.AIR in route.modes for route in routes))
 
+    def test_scenario_additive_customs_delay_changes_leg_and_route_time(self):
+        network = global_demo_network()
+        profile = global_demo_shipments()[0]
+        scenario = DisruptionScenario(
+            "customs-delay",
+            transit_time_additions={"sea-singapore-colombo": 2.5},
+        )
+        baseline = generate_candidate_routes(network, profile.request, max_routes=20)
+        delayed = generate_candidate_routes(network, profile.request, scenario, max_routes=20)
+        route_id = next(
+            route.id
+            for route in baseline
+            if "sea-singapore-colombo" in {leg.link_id for leg in route.legs}
+        )
+        base_route = next(route for route in baseline if route.id == route_id)
+        delayed_route = next(route for route in delayed if route.id == route_id)
+        self.assertEqual(delayed_route.transit_time, base_route.transit_time + 2.5)
+        base_leg = next(leg for leg in base_route.legs if leg.link_id == "sea-singapore-colombo")
+        delayed_leg = next(leg for leg in delayed_route.legs if leg.link_id == "sea-singapore-colombo")
+        self.assertEqual(delayed_leg.transit_time, base_leg.transit_time + 2.5)
+        validate_candidate_route(network, profile.request, delayed_route, scenario)
+
     def test_route_search_rejects_bad_limits_and_non_geospatial_networks(self):
         network = global_demo_network()
         shipment = global_demo_shipments()[0].request

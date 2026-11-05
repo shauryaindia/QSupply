@@ -15,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 from .schemas import RunRecord
 
 _POSTGRES_SCHEMA_LOCK = 0x51535550504C59
-_LATEST_SCHEMA_VERSION = 3
+_LATEST_SCHEMA_VERSION = 4
 
 
 def utc_now() -> datetime:
@@ -170,6 +170,27 @@ class RunStore:
                         connection,
                         "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
                         (3, self._timestamp()),
+                    )
+
+                if 4 not in applied:
+                    self._execute(
+                        connection,
+                        "CREATE TABLE IF NOT EXISTS global_scenarios ("
+                        "id TEXT PRIMARY KEY,"
+                        "name TEXT NOT NULL,"
+                        "description TEXT NOT NULL,"
+                        "inputs_json TEXT NOT NULL,"
+                        f"created_at {timestamp_type} NOT NULL)",
+                    )
+                    self._execute(
+                        connection,
+                        "CREATE INDEX IF NOT EXISTS idx_global_scenarios_created_at "
+                        "ON global_scenarios(created_at DESC)",
+                    )
+                    self._execute(
+                        connection,
+                        "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                        (4, self._timestamp()),
                     )
 
                 self._execute(
@@ -390,6 +411,74 @@ class RunStore:
                 (limit,),
             ).fetchall()
         return [record for row in rows if (record := self._global_record(row)) is not None]
+
+    @staticmethod
+    def _scenario_record(row: Any | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"],
+            "inputs": json.loads(row["inputs_json"]),
+            "created_at": row["created_at"],
+        }
+
+    def create_global_scenario(
+        self,
+        scenario_id: str,
+        name: str,
+        description: str,
+        inputs: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.initialize()
+        with self._connection() as connection:
+            self._execute(
+                connection,
+                "INSERT INTO global_scenarios (id, name, description, inputs_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    scenario_id,
+                    name,
+                    description,
+                    json.dumps(inputs, separators=(",", ":")),
+                    self._timestamp(),
+                ),
+            )
+        scenario = self.get_global_scenario(scenario_id)
+        if scenario is None:
+            raise RuntimeError("Scenario creation did not persist a record")
+        return scenario
+
+    def get_global_scenario(self, scenario_id: str) -> dict[str, Any] | None:
+        self.initialize()
+        with self._connection() as connection:
+            row = self._execute(
+                connection,
+                "SELECT * FROM global_scenarios WHERE id = ?",
+                (scenario_id,),
+            ).fetchone()
+        return self._scenario_record(row)
+
+    def list_global_scenarios(self, limit: int = 100) -> list[dict[str, Any]]:
+        self.initialize()
+        with self._connection() as connection:
+            rows = self._execute(
+                connection,
+                "SELECT * FROM global_scenarios ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [record for row in rows if (record := self._scenario_record(row)) is not None]
+
+    def delete_global_scenario(self, scenario_id: str) -> bool:
+        self.initialize()
+        with self._connection() as connection:
+            cursor = self._execute(
+                connection,
+                "DELETE FROM global_scenarios WHERE id = ?",
+                (scenario_id,),
+            )
+            return cursor.rowcount == 1
 
 
 class SQLiteRunStore(RunStore):

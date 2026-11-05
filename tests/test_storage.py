@@ -143,7 +143,7 @@ class TestSQLiteRunStore(unittest.TestCase):
                 "SELECT request_json FROM optimization_runs WHERE id = ?",
                 ("legacy-run",),
             ).fetchone()["request_json"]
-        self.assertEqual(versions, {1, 2, 3})
+        self.assertEqual(versions, {1, 2, 3, 4})
         self.assertEqual(json.loads(request_json), {})
 
     def test_global_optimization_results_persist_across_store_restarts(self):
@@ -167,6 +167,28 @@ class TestSQLiteRunStore(unittest.TestCase):
         self.assertEqual(
             [item["id"] for item in restarted.list_global_optimizations()],
             ["global-run-1"],
+        )
+
+    def test_custom_scenarios_persist_and_delete_without_touching_saved_runs(self):
+        scenario = self.store.create_global_scenario(
+            "custom-1",
+            "Port closure",
+            "Synthetic test scenario",
+            {"closed_link_ids": ["link-1"], "transit_time_additions": {"link-2": 3}},
+        )
+        self.assertEqual(scenario["name"], "Port closure")
+        self.store.create_global_optimization("run-scenario", "custom-1", {"cost": 100})
+        self.store.complete_global_optimization(
+            "run-scenario", {"scenario_snapshot": scenario}
+        )
+        restarted = SQLiteRunStore(self.database)
+        self.assertEqual(restarted.get_global_scenario("custom-1"), scenario)
+        self.assertEqual(restarted.list_global_scenarios(), [scenario])
+        self.assertTrue(restarted.delete_global_scenario("custom-1"))
+        self.assertFalse(restarted.delete_global_scenario("custom-1"))
+        self.assertEqual(
+            restarted.get_global_optimization("run-scenario")["result"]["scenario_snapshot"],
+            scenario,
         )
 
     def test_global_optimization_status_transitions_are_guarded(self):

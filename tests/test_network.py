@@ -70,6 +70,16 @@ class TestNetworkModels(unittest.TestCase):
         )
         self.network.validate_shipment(shipment)
 
+    def test_disruption_scenario_validates_immutable_delay_additions(self):
+        additions = {"sea-1": 2.5}
+        scenario = DisruptionScenario("customs", transit_time_additions=additions)
+        additions["sea-1"] = 99
+        self.assertEqual(scenario.transit_time_additions["sea-1"], 2.5)
+        with self.assertRaises(TypeError):
+            scenario.transit_time_additions["sea-1"] = 3
+        with self.assertRaisesRegex(ValueError, "unknown links"):
+            DisruptionScenario("unknown-delay", transit_time_additions={"missing": 1}).validate_for(self.network)
+
     def test_input_mappings_and_tags_are_immutable_copies(self):
         source_locations = dict(self.locations)
         network = TransportationNetwork(

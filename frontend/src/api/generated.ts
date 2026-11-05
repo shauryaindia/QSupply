@@ -133,8 +133,27 @@ export interface paths {
         /** Global Scenarios */
         get: operations["global_scenarios_api_v1_global_scenarios_get"];
         put?: never;
-        post?: never;
+        /** Create Global Scenario */
+        post: operations["create_global_scenario_api_v1_global_scenarios_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/scenarios/{scenario_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Global Scenario Detail */
+        get: operations["get_global_scenario_detail_api_v1_global_scenarios__scenario_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Global Scenario */
+        delete: operations["delete_global_scenario_api_v1_global_scenarios__scenario_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -220,6 +239,40 @@ export interface paths {
         get: operations["global_optimization_report_api_v1_global_optimizations__run_id__report_csv_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/optimizations/{run_id}/report.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Optimization Pdf Report */
+        get: operations["global_optimization_pdf_report_api_v1_global_optimizations__run_id__report_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/optimizations/{run_id}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask About Optimization */
+        post: operations["ask_about_optimization_api_v1_global_optimizations__run_id__questions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -339,6 +392,34 @@ export interface components {
             /** Description */
             description: string;
         };
+        /** DecisionAnswerResponse */
+        DecisionAnswerResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Shipment Id */
+            shipment_id: string;
+            /** Route Id */
+            route_id: string;
+            /** Answer */
+            answer: string;
+            /** Analysis Type */
+            analysis_type: string;
+            /** Uses Llm */
+            uses_llm: boolean;
+            /** Source Data */
+            source_data: {
+                [key: string]: unknown;
+            };
+        };
+        /** DecisionQuestionRequest */
+        DecisionQuestionRequest: {
+            /** Shipment Id */
+            shipment_id: string;
+            /** Question */
+            question: string;
+            /** Route Id */
+            route_id?: string | null;
+        };
         /** GlobalOptimizationListResponse */
         GlobalOptimizationListResponse: {
             /** Items */
@@ -389,6 +470,7 @@ export interface components {
             synthetic: boolean;
             /** Scenario Id */
             scenario_id: string | null;
+            scenario_snapshot?: components["schemas"]["NetworkScenario"] | null;
             weights: components["schemas"]["ObjectiveWeightsInput"];
             normalization_references: components["schemas"]["ObjectiveReferencesResponse"];
             /** Recovery Feasible */
@@ -413,6 +495,36 @@ export interface components {
              * @default 8
              */
             max_routes: number;
+        };
+        /** GlobalScenarioCreateRequest */
+        GlobalScenarioCreateRequest: {
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Closed Link Ids */
+            closed_link_ids?: string[];
+            /** Unavailable Location Ids */
+            unavailable_location_ids?: string[];
+            /** Capacity Overrides */
+            capacity_overrides?: {
+                [key: string]: number;
+            };
+            /** Cost Multipliers */
+            cost_multipliers?: {
+                [key: string]: number;
+            };
+            /** Transit Time Multipliers */
+            transit_time_multipliers?: {
+                [key: string]: number;
+            };
+            /** Transit Time Additions */
+            transit_time_additions?: {
+                [key: string]: number;
+            };
         };
         /** GlobalShipment */
         GlobalShipment: {
@@ -575,6 +687,11 @@ export interface components {
         NetworkScenario: {
             /** Id */
             id: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
             /** Description */
             description: string;
             /**
@@ -582,6 +699,13 @@ export interface components {
              * @default true
              */
             synthetic: boolean;
+            /**
+             * Custom
+             * @default false
+             */
+            custom: boolean;
+            /** Created At */
+            created_at?: string | null;
             /** Closed Link Ids */
             closed_link_ids: string[];
             /** Unavailable Location Ids */
@@ -596,6 +720,10 @@ export interface components {
             };
             /** Transit Time Multipliers */
             transit_time_multipliers: {
+                [key: string]: number;
+            };
+            /** Transit Time Additions */
+            transit_time_additions?: {
                 [key: string]: number;
             };
         };
@@ -666,6 +794,34 @@ export interface components {
             balanced_score: number;
             /** Maximum Capacity Utilization */
             maximum_capacity_utilization: number | null;
+            /** Route Feasible */
+            route_feasible: boolean;
+            /** Feasibility Constraints */
+            feasibility_constraints: string[];
+            /** Capacity Constraints */
+            capacity_constraints: components["schemas"]["RouteCapacityConstraint"][];
+            /** Transfer Count */
+            transfer_count: number;
+            /**
+             * Transfer Cost Modelled
+             * @default false
+             */
+            transfer_cost_modelled: boolean;
+            /**
+             * Handling Cost Modelled
+             * @default false
+             */
+            handling_cost_modelled: boolean;
+            /** Cost Drivers */
+            cost_drivers: components["schemas"]["RouteMetricContribution"][];
+            /** Time Drivers */
+            time_drivers: components["schemas"]["RouteMetricContribution"][];
+            /** Carbon Hotspots */
+            carbon_hotspots: components["schemas"]["RouteMetricContribution"][];
+            /** Disruption Exposure */
+            disruption_exposure: number;
+            /** Recovery Recommendation */
+            recovery_recommendation: string;
             /** Carbon By Mode Kg */
             carbon_by_mode_kg: {
                 [key: string]: number;
@@ -713,6 +869,17 @@ export interface components {
             };
             /** Method */
             method: string;
+        };
+        /** RouteCapacityConstraint */
+        RouteCapacityConstraint: {
+            /** Link Id */
+            link_id: string;
+            /** Quantity */
+            quantity: number;
+            /** Capacity */
+            capacity: number;
+            /** Utilization */
+            utilization: number;
         };
         /** RouteDeltaResponse */
         RouteDeltaResponse: {
@@ -804,6 +971,17 @@ export interface components {
             ][];
             /** Resilience Exposure */
             resilience_exposure: number;
+        };
+        /** RouteMetricContribution */
+        RouteMetricContribution: {
+            /** Link Id */
+            link_id: string;
+            /** Mode */
+            mode?: string | null;
+            /** Value */
+            value: number;
+            /** Unit */
+            unit: string;
         };
         /** RunCreateRequest */
         RunCreateRequest: {
@@ -1126,6 +1304,99 @@ export interface operations {
             };
         };
     };
+    create_global_scenario_api_v1_global_scenarios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlobalScenarioCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkScenario"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_global_scenario_detail_api_v1_global_scenarios__scenario_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkScenario"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_global_scenario_api_v1_global_scenarios__scenario_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     global_routes_api_v1_global_routes_post: {
         parameters: {
             query?: never;
@@ -1304,6 +1575,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    global_optimization_pdf_report_api_v1_global_optimizations__run_id__report_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_about_optimization_api_v1_global_optimizations__run_id__questions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionAnswerResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
