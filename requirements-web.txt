@@ -1,0 +1,3 @@
+# Optional web service dependencies. The core qsupply package remains stdlib-only.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
