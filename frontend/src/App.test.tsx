@@ -126,6 +126,21 @@ describe("QSupply dashboard interactions", () => {
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
   });
 
+  it("formats exact rational distances in run history as readable decimals", async () => {
+    const rationalRun: RunRecord = {
+      ...completedRun,
+      result: {
+        ...completedRun.result!,
+        total_distance: 171.967459644671,
+        total_distance_exact: "96809073396948901/562949953421312",
+      },
+    };
+    vi.mocked(api.runs).mockResolvedValue({ items: [rationalRun] });
+    render(<App />);
+    const formattedDistances = await screen.findAllByText("171.967 units");
+    expect(formattedDistances.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("submits the selected solver and renders its returned route and metrics", async () => {
     const user = userEvent.setup();
     vi.mocked(api.createRun).mockResolvedValue(completedRun);
@@ -142,7 +157,7 @@ describe("QSupply dashboard interactions", () => {
       "nearest-neighbor+2-opt",
     );
     await user.click(screen.getByRole("button", { name: /Run optimization/ }));
-    await screen.findByText("42", { selector: "strong" });
+    await screen.findByText("42.000", { selector: "strong" });
     expect(api.createRun).toHaveBeenCalledWith({
       instance_id: "synthetic-5",
       solver: "nearest-neighbor+2-opt",
@@ -150,6 +165,49 @@ describe("QSupply dashboard interactions", () => {
     });
     expect(screen.getByText("customer-1")).toBeInTheDocument();
     expect(screen.getByText("Validated")).toBeInTheDocument();
+    expect(screen.getByText("2-opt improvement")).toBeInTheDocument();
+    expect(screen.getByText("Initial heuristic")).toBeInTheDocument();
+    expect(
+      screen.getByText("50.000 units", { selector: "strong" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("40.000 units", { selector: "strong" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Final heuristic optimality gap"),
+    ).toBeInTheDocument();
+  });
+
+  it("presents a depot-only route as an unused vehicle without altering the result", async () => {
+    const user = userEvent.setup();
+    const runWithUnusedVehicle: RunRecord = {
+      ...completedRun,
+      result: {
+        ...completedRun.result!,
+        routes: {
+          "vehicle-1": ["depot", "customer-1", "depot"],
+          "vehicle-2": ["depot", "depot"],
+        },
+      },
+    };
+    vi.mocked(api.createRun).mockResolvedValue(runWithUnusedVehicle);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(
+      within(
+        screen.getByRole("navigation", { name: "Main navigation" }),
+      ).getByRole("button", { name: /Optimization/ }),
+    );
+    await user.click(screen.getByRole("button", { name: /Run optimization/ }));
+    expect(await screen.findByText("Unused vehicle")).toBeInTheDocument();
+    expect(
+      screen.getByText("No customers assigned · Depot → Depot"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("customer-1")).toBeInTheDocument();
+    expect(runWithUnusedVehicle.result?.routes["vehicle-2"]).toEqual([
+      "depot",
+      "depot",
+    ]);
   });
 
   it("disables exact solver and exact comparison above the supported size", async () => {

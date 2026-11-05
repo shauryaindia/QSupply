@@ -69,3 +69,62 @@ export const formatNumber = (
       )
     : String(value);
 };
+
+const DISTANCE_DECIMAL_PLACES = 3;
+
+function decimalRational(value: string): [bigint, bigint] | null {
+  const fraction = /^([+-]?\d+)\/([+-]?\d+)$/.exec(value);
+  if (fraction) {
+    const denominator = BigInt(fraction[2]);
+    if (denominator === 0n) return null;
+    return [BigInt(fraction[1]), denominator];
+  }
+
+  const decimal = /^([+-]?)(\d+)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(value);
+  if (!decimal) return null;
+  const sign = decimal[1] === "-" ? -1n : 1n;
+  const fractionDigits = decimal[3] ?? "";
+  const exponent = Number(decimal[4] ?? 0);
+  if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > 1000) return null;
+  const digits = BigInt(`${decimal[2]}${fractionDigits}`) * sign;
+  const scale = fractionDigits.length - exponent;
+  return scale >= 0
+    ? [digits, 10n ** BigInt(scale)]
+    : [digits * 10n ** BigInt(-scale), 1n];
+}
+
+/** Format an exact integer/rational distance for display without Number rounding. */
+export function formatDistance(
+  value: number | string | null | undefined,
+): string {
+  if (value === null || value === undefined) return "—";
+  const source = String(value).trim();
+  const rational = decimalRational(source);
+  if (!rational) return source;
+
+  let [numerator, denominator] = rational;
+  if (denominator < 0n) {
+    numerator = -numerator;
+    denominator = -denominator;
+  }
+  const negative = numerator < 0n;
+  const scale = 10n ** BigInt(DISTANCE_DECIMAL_PLACES);
+  const absoluteScaled = (negative ? -numerator : numerator) * scale;
+  const rounded = (absoluteScaled * 2n + denominator) / (2n * denominator);
+  const whole = (rounded / scale)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const decimal = (rounded % scale)
+    .toString()
+    .padStart(DISTANCE_DECIMAL_PLACES, "0");
+  return `${negative && rounded !== 0n ? "-" : ""}${whole}.${decimal}`;
+}
+
+/** Numeric value for charts, derived only from the already-rounded display value. */
+export function distanceChartValue(
+  value: number | string | null | undefined,
+): number {
+  const displayValue = formatDistance(value).replaceAll(",", "");
+  const parsed = Number(displayValue);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}

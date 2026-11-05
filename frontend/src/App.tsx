@@ -12,6 +12,8 @@ import {
 import type { Core } from "cytoscape";
 import {
   api,
+  distanceChartValue,
+  formatDistance,
   formatNumber,
   type Capabilities,
   type InstanceSummary,
@@ -21,6 +23,12 @@ import {
 } from "./api/client";
 
 type Page = "overview" | "workspace" | "network" | "benchmarking" | "quantum";
+
+function isUnusedVehicleRoute(route: string[]): boolean {
+  return (
+    route.length === 2 && route.every((stop) => stop.toLowerCase() === "depot")
+  );
+}
 
 const Charts = lazy(() => import("./Charts"));
 
@@ -207,7 +215,7 @@ function RunTable({
               <td>{solverNames[run.solver]}</td>
               <td>
                 {run.result
-                  ? `${formatNumber(run.result.total_distance_exact)} units`
+                  ? `${formatDistance(run.result.total_distance_exact)} units`
                   : "—"}
               </td>
               <td>
@@ -245,7 +253,7 @@ function Overview({
     .reverse()
     .map((run, index) => ({
       run: `Run ${index + 1}`,
-      distance: Number(run.result?.total_distance_exact),
+      distance: distanceChartValue(run.result?.total_distance_exact),
     }));
   return (
     <>
@@ -279,7 +287,9 @@ function Overview({
         <MetricCard
           label="Latest route distance"
           value={
-            latest ? `${formatNumber(latest.total_distance_exact)} units` : "—"
+            latest
+              ? `${formatDistance(latest.total_distance_exact)} units`
+              : "—"
           }
           detail={
             latest
@@ -651,7 +661,7 @@ function ResultDetails({ run }: { run: RunRecord }) {
         <div>
           <small>Total route distance</small>
           <strong>
-            {formatNumber(result.total_distance_exact)} <em>units</em>
+            {formatDistance(result.total_distance_exact)} <em>units</em>
           </strong>
         </div>
         <div>
@@ -667,17 +677,36 @@ function ResultDetails({ run }: { run: RunRecord }) {
           </strong>
         </div>
       </div>
-      {result.initial_distance_exact && (
-        <div className="comparison-strip">
-          <span>Initial distance</span>
-          <strong>{formatNumber(result.initial_distance_exact)}</strong>
-          {result.improvement_percent !== null &&
-            result.improvement_percent !== undefined && (
-              <>
-                <span>2-opt improvement</span>
-                <strong>{formatNumber(result.improvement_percent)}%</strong>
-              </>
-            )}
+      {result.initial_distance_exact && result.improvement_percent != null && (
+        <div className="comparison-card">
+          <div className="comparison-heading">
+            <strong>2-opt improvement</strong>
+            <small>
+              Initial heuristic route compared with its 2-opt result.
+            </small>
+          </div>
+          <div className="comparison-values">
+            <div>
+              <span>Initial heuristic</span>
+              <strong>
+                {formatDistance(result.initial_distance_exact)} units
+              </strong>
+            </div>
+            <div>
+              <span>After 2-opt</span>
+              <strong>
+                {formatDistance(result.total_distance_exact)} units
+              </strong>
+            </div>
+            <div>
+              <span>Distance improvement</span>
+              <strong>{formatNumber(result.improvement_percent)}%</strong>
+            </div>
+          </div>
+          <small className="comparison-formula">
+            Improvement compares the initial heuristic distance with the final
+            2-opt distance.
+          </small>
         </div>
       )}
       <div className="route-list-heading">
@@ -685,42 +714,63 @@ function ResultDetails({ run }: { run: RunRecord }) {
         <span>{result.customer_count} customers</span>
       </div>
       <div className="route-list">
-        {Object.entries(result.routes).map(([vehicle, route]) => (
-          <div className="route-card" key={vehicle}>
-            <div className="vehicle-chip">
-              {vehicle.replace("vehicle-", "V")}
+        {Object.entries(result.routes).map(([vehicle, route]) =>
+          isUnusedVehicleRoute(route) ? (
+            <div className="unused-route-card" key={vehicle}>
+              <div className="vehicle-chip">
+                {vehicle.replace("vehicle-", "V")}
+              </div>
+              <div className="unused-route-copy">
+                <strong>Unused vehicle</strong>
+                <span>No customers assigned · Depot → Depot</span>
+              </div>
+              <Badge>Unused</Badge>
             </div>
-            <div className="route-line">
-              <span className="depot-dot">D</span>
-              {route
-                .filter((node) => node !== "depot")
-                .map((node) => (
-                  <span key={node} className="route-stop">
-                    <i />
-                    {node}
-                  </span>
-                ))}
-              <span className="depot-dot">D</span>
+          ) : (
+            <div className="route-card" key={vehicle}>
+              <div className="vehicle-chip">
+                {vehicle.replace("vehicle-", "V")}
+              </div>
+              <div className="route-line">
+                <span className="depot-dot">D</span>
+                {route
+                  .filter((node) => node !== "depot")
+                  .map((node) => (
+                    <span key={node} className="route-stop">
+                      <i />
+                      {node}
+                    </span>
+                  ))}
+                <span className="depot-dot">D</span>
+              </div>
             </div>
-          </div>
-        ))}
+          ),
+        )}
       </div>
       {result.exact_reference_distance_exact && (
         <div className="exact-reference">
           <div>
             <span className="exact-star">✦</span>
             <div>
-              <strong>Exact reference</strong>
-              <small>Same instance · exact objective</small>
+              <strong>Exact optimality comparison</strong>
+              <small>
+                Final heuristic distance compared with the exact reference.
+              </small>
             </div>
           </div>
           <strong>
-            {formatNumber(result.exact_reference_distance_exact)} units
+            {formatDistance(result.exact_reference_distance_exact)} units
           </strong>
           <div>
-            <span>Heuristic optimality gap</span>
+            <span>Final heuristic optimality gap</span>
             <b>{formatNumber(result.optimality_gap_percent)}%</b>
           </div>
+        </div>
+      )}
+      {result.exact_reference_distance_exact && (
+        <div className="comparison-formula exact-formula">
+          Optimality gap compares the final heuristic distance with the exact
+          solver distance for the same instance.
         </div>
       )}
       <div className="validation-confirm">
@@ -1113,7 +1163,9 @@ function Benchmarking({
                       .reverse()
                       .map((run) => ({
                         label: solverNames[run.solver],
-                        value: Number(run.result?.total_distance_exact),
+                        value: distanceChartValue(
+                          run.result?.total_distance_exact,
+                        ),
                       }))}
                     variant="comparison"
                   />
@@ -1123,7 +1175,9 @@ function Benchmarking({
                   One solver result:{" "}
                   <strong>{solverNames[instanceRuns[0].solver]}</strong> at{" "}
                   <strong>
-                    {formatNumber(instanceRuns[0].result?.total_distance_exact)}{" "}
+                    {formatDistance(
+                      instanceRuns[0].result?.total_distance_exact,
+                    )}{" "}
                     units
                   </strong>
                   . Run another method to compare.
@@ -1148,7 +1202,7 @@ function Benchmarking({
                     <tr key={run.id}>
                       <td>{solverNames[run.solver]}</td>
                       <td>
-                        {formatNumber(run.result?.total_distance_exact)} units
+                        {formatDistance(run.result?.total_distance_exact)} units
                       </td>
                       <td>
                         {run.result?.feasible ? (
@@ -1159,7 +1213,7 @@ function Benchmarking({
                       </td>
                       <td>
                         {run.result?.exact_reference_distance_exact
-                          ? `${formatNumber(run.result.exact_reference_distance_exact)} units`
+                          ? `${formatDistance(run.result.exact_reference_distance_exact)} units`
                           : "Not measured"}
                       </td>
                       <td>

@@ -849,6 +849,54 @@ th:first-child {
   color: #46566b;
   font-size: 10px;
 }
+.comparison-card {
+  margin: 12px 0;
+  padding: 11px;
+  border: 1px solid #e6ebf1;
+  border-radius: 7px;
+  background: #fbfcfd;
+}
+.comparison-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.comparison-heading strong {
+  color: #43546a;
+  font-size: 10px;
+}
+.comparison-heading small,
+.comparison-formula {
+  color: #8995a3;
+  font-size: 8px;
+  line-height: 1.5;
+}
+.comparison-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 10px 0 8px;
+}
+.comparison-values > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.comparison-values span {
+  color: #8c98a6;
+  font-size: 8px;
+}
+.comparison-values strong {
+  color: #43546a;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.comparison-values > div:last-child strong {
+  color: #287967;
+}
+.exact-formula {
+  margin: 7px 0 3px;
+}
 .route-list-heading {
   display: flex;
   justify-content: space-between;
@@ -876,6 +924,29 @@ th:first-child {
   border: 1px solid #edf0f3;
   border-radius: 7px;
   background: #fcfdfd;
+}
+.unused-route-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px dashed #e1e6eb;
+  border-radius: 7px;
+  background: #fafbfc;
+}
+.unused-route-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+.unused-route-copy strong {
+  color: #59697b;
+  font-size: 9px;
+}
+.unused-route-copy span {
+  color: #929dab;
+  font-size: 8px;
 }
 .vehicle-chip {
   min-width: 26px;
