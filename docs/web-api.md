@@ -29,12 +29,18 @@ The OpenAPI document is served at `http://127.0.0.1:8000/openapi.json`.
   `/scenarios` expose the separate geocoded synthetic global demonstration.
 - `POST /api/v1/global/routes` generates and validates bounded candidate routes
   for a shipment under an optional disruption scenario.
+- `POST /api/v1/global/route-intelligence` returns route rankings, metric deltas
+  against the selected baseline, deadline/capacity indicators, mode-level
+  synthetic carbon and deterministic rule-based explanations. It does not call
+  an LLM.
 - `POST /api/v1/global/optimizations` persists and evaluates a baseline
   shipment-to-route assignment and, when requested, a disruption recovery
   assignment. `GET /api/v1/global/optimizations` and
   `/optimizations/{id}` return the persisted run history/result.
 - `GET /api/v1/global/optimizations/{run_id}/shipments/{shipment_id}/position`
   returns deterministic simulated movement at the supplied elapsed time.
+- `GET /api/v1/global/optimizations/{run_id}/report.csv` exports the saved
+  baseline/recovery metrics and selected route legs as a CSV report.
 - `POST /api/v1/runs` queues a real QSupply nearest-neighbour,
   nearest-neighbour + 2-opt, or exact CVRP solver run.
 - `GET /api/v1/runs` and `GET /api/v1/runs/{id}` return persistent run

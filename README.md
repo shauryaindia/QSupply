@@ -128,7 +128,9 @@ Rather than assuming a particular optimization paradigm is superior, QSupply aim
 
 🚧 QSupply is an early local prototype. It includes tested Python optimization
 models, CVRP heuristic and exact solvers, benchmarking, an optional API, and a
-browser dashboard. Multimodal routing and quantum execution are not implemented.
+browser dashboard. A bounded synthetic multimodal route and disruption-recovery
+demonstration is implemented; production data integrations and quantum execution
+are not.
 
 Current focus:
 - System architecture and core optimization framework
@@ -194,9 +196,13 @@ The optional FastAPI adapter exposes the CVRP engine and a small global
 multimodal demonstration. The global workspace uses a deterministic synthetic
 network and shipment set to generate bounded candidate routes, compare a
 baseline assignment with a simulated corridor disruption, and report recovery
-feasibility and business metrics. It is not a live logistics feed or a general
-global route optimizer. See [`docs/global-network.md`](docs/global-network.md)
-and [`docs/web-api.md`](docs/web-api.md) for assumptions, APIs and limitations.
+feasibility and business metrics. It provides configurable normalized route
+rankings, a deterministic rule-based route explanation, per-mode carbon
+breakdowns and downloadable CSV reports for persisted runs. The map and product
+overview identify their inputs as synthetic. This is not a live logistics feed
+or a general global route optimizer. See
+[`docs/global-network.md`](docs/global-network.md) and
+[`docs/web-api.md`](docs/web-api.md) for assumptions, APIs and limitations.
 
 To start the application from the repository root, use two terminals:
 

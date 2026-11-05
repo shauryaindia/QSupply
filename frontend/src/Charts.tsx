@@ -15,9 +15,10 @@ export default function Charts({
   variant,
 }: {
   data: ChartDatum[];
-  variant: "history" | "comparison";
+  variant: "history" | "comparison" | "mode-distribution";
 }) {
   const history = variant === "history";
+  const modeDistribution = variant === "mode-distribution";
   return (
     <ResponsiveContainer width="100%" height={history ? 226 : 195}>
       <BarChart data={data} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
@@ -30,15 +31,18 @@ export default function Charts({
           dataKey="label"
           tickLine={false}
           axisLine={false}
-          tick={{ fill: "#8792a2", fontSize: 11 }}
+          tick={{ fill: "#657488", fontSize: 13 }}
         />
         <YAxis
           tickLine={false}
           axisLine={false}
-          tick={{ fill: "#8792a2", fontSize: 11 }}
+          tick={{ fill: "#657488", fontSize: 13 }}
           width={42}
         />
-        <Tooltip formatter={(value) => [`${value} units`, "Route distance"]} />
+        <Tooltip formatter={(value) => [
+          modeDistribution ? `${value} links` : `${value} units`,
+          modeDistribution ? "Network connections" : "Route distance",
+        ]} />
         <Bar
           dataKey="value"
           fill="#237d73"

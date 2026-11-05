@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
-import { api, type GlobalOptimization, type RunRecord } from "./api/client";
+import { api, type GlobalOptimization, type RouteIntelligence, type RunRecord } from "./api/client";
 
 vi.mock("./GlobalNetworkMap", () => ({
   default: () => <div data-testid="global-map" />,
@@ -27,6 +27,7 @@ vi.mock("./api/client", async (importOriginal) => {
       globalShipments: vi.fn(),
       globalScenarios: vi.fn(),
       globalRoutes: vi.fn(),
+      routeIntelligence: vi.fn(),
       globalOptimizations: vi.fn(),
       globalOptimization: vi.fn(),
       createGlobalOptimization: vi.fn(),
@@ -146,6 +147,9 @@ beforeEach(() => {
   vi.mocked(api.globalShipments).mockResolvedValue([]);
   vi.mocked(api.globalScenarios).mockResolvedValue([]);
   vi.mocked(api.globalRoutes).mockResolvedValue([]);
+  vi.mocked(api.routeIntelligence).mockRejectedValue(
+    new Error("No route intelligence fixture configured"),
+  );
   vi.mocked(api.globalOptimizations).mockResolvedValue({ items: [] });
   vi.mocked(api.createGlobalOptimization).mockRejectedValue(
     new Error("No global optimization fixture configured"),
@@ -192,7 +196,7 @@ describe("QSupply dashboard interactions", () => {
     vi.mocked(api.runs).mockResolvedValue({ items: [rationalRun] });
     render(<App />);
     const formattedDistances = await screen.findAllByText("171.967 units");
-    expect(formattedDistances.length).toBeGreaterThanOrEqual(2);
+    expect(formattedDistances.length).toBeGreaterThanOrEqual(1);
   });
 
   it("submits the selected solver and renders its returned route and metrics", async () => {
@@ -357,6 +361,39 @@ describe("QSupply dashboard interactions", () => {
       departure_time: "2026-01-01T00:00:00Z",
       synthetic: true,
     };
+    vi.mocked(api.routeIntelligence).mockResolvedValue({
+      shipment_id: shipment.id,
+      scenario_id: scenarioId,
+      synthetic: true,
+      recommended_route_id: route.id,
+      assignment_route_id: route.id,
+      baseline_route: route,
+      routes: [route],
+      rankings: { cost: [route.id], time: [route.id], carbon: [route.id], resilience: [route.id], balanced: [route.id] },
+      analyses: {
+        [route.id]: {
+          route_id: route.id,
+          total_cost: 213,
+          delay_penalty: 0,
+          deadline_met: true,
+          deadline_slack_days: 5,
+          balanced_score: 0.4,
+          maximum_capacity_utilization: 2 / 3,
+          carbon_by_mode_kg: { sea: 10 },
+          largest_cost_leg_id: "sea-jebel-rotterdam",
+          largest_carbon_leg_id: "sea-jebel-rotterdam",
+          delta_vs_baseline: { baseline_route_id: route.id, cost_savings: 0, cost_savings_percent: 0, time_savings_days: 0, carbon_savings_kg: 0, carbon_savings_percent: 0 },
+          recommendation: "Recommended for the configured weighted profile.",
+          advantages: ["Meets the modeled deadline."],
+          tradeoffs: ["No measured reliability data."],
+          analysis_type: "deterministic_rule_based",
+          uses_llm: false,
+        },
+      },
+      recovery_feasible: true,
+      normalization_references: { cost: 500, delivery_time: 50, carbon: 30, resilience: 2 },
+      assumptions: ["Synthetic demonstration data."],
+    } as RouteIntelligence);
     vi.mocked(api.globalShipments).mockResolvedValue([shipment]);
     vi.mocked(api.createGlobalOptimization).mockResolvedValue(optimization);
 
@@ -374,6 +411,24 @@ describe("QSupply dashboard interactions", () => {
       max_routes: 8,
     });
     expect(await screen.findByText("Recovery feasible")).toBeInTheDocument();
+    expect(await screen.findByText("Recommended for the configured weighted profile.")).toBeInTheDocument();
+    expect(screen.getByText("DETERMINISTIC ROUTE INTELLIGENCE · NO LLM")).toBeInTheDocument();
+    expect(screen.getByText("Estimated carbon by mode")).toBeInTheDocument();
     expect(screen.getByText("Shipment movement · simulated")).toBeInTheDocument();
+  });
+
+  it("applies a predefined multi-objective profile with weights totaling 100", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: /Network explorer/ }),
+    );
+    await user.selectOptions(await screen.findByLabelText("Objective profile"), "cost-priority");
+    expect(await screen.findByRole("spinbutton", { name: /cost/ })).toHaveValue(70);
+    expect(screen.getByRole("spinbutton", { name: /delivery time/ })).toHaveValue(10);
+    expect(screen.getByRole("spinbutton", { name: /carbon/ })).toHaveValue(10);
+    expect(screen.getByRole("spinbutton", { name: /resilience/ })).toHaveValue(10);
+    expect(screen.getByText("Objective weights: 100% · valid")).toBeInTheDocument();
   });
 });

@@ -1,9 +1,12 @@
 """FastAPI application exposing existing QSupply functionality to the dashboard."""
 
 from pathlib import Path
+import csv
+from io import StringIO
+import json
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from qsupply import MAX_EXACT_CUSTOMERS
@@ -16,6 +19,7 @@ from .global_service import (
     global_network_response,
     movement_for_result,
     run_global_optimization,
+    route_intelligence,
     shipment_response,
 )
 from .instances import get_cvrp_instance, list_cvrp_instances, synthetic_network_response
@@ -36,6 +40,8 @@ from .schemas import (
     RunCreateRequest,
     RunListResponse,
     RunRecord,
+    RouteIntelligenceRequest,
+    RouteIntelligenceResponse,
     ShipmentPositionResponse,
     SolverCapability,
     SolverId,
@@ -95,7 +101,8 @@ def create_app(
             features=[
                 CapabilityStatus(id="qubo-formulation", status="available", description="QUBO energy evaluation and import-export QUBO formulation; no general QUBO solver."),
                 CapabilityStatus(id="cvrp", status="available", description="CVRP model, heuristic, exact solver, and CVRP benchmarks."),
-                CapabilityStatus(id="multimodal-network-models", status="available", description="Validated network, link, shipment, and disruption data models; no multimodal route optimizer yet."),
+                CapabilityStatus(id="multimodal-network-models", status="available", description="Validated geospatial network, link, shipment, and disruption models."),
+                CapabilityStatus(id="multimodal-route-optimization", status="available_demo", description="Bounded candidate-route generation and capacity-aware assignment on the labelled synthetic network; no general production solver."),
                 CapabilityStatus(id="milp", status="unavailable", description="No MILP adapter is implemented."),
             ],
             integrations=[
@@ -156,6 +163,26 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(error)) from error
 
     @app.post(
+        "/api/v1/global/route-intelligence",
+        response_model=RouteIntelligenceResponse,
+        tags=["global-optimization"],
+    )
+    def global_route_intelligence(
+        request: RouteIntelligenceRequest,
+    ) -> RouteIntelligenceResponse:
+        try:
+            return route_intelligence(
+                request.shipment_id,
+                request.scenario_id,
+                request.weights.model_dump(),
+                request.max_routes,
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Shipment or scenario was not found") from error
+        except (ValueError, RecoverySearchLimitError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post(
         "/api/v1/global/optimizations",
         response_model=GlobalOptimizationRecord,
         status_code=201,
@@ -212,6 +239,88 @@ def create_app(
         if record is None:
             raise HTTPException(status_code=404, detail="Optimization run was not found")
         return GlobalOptimizationRecord.model_validate(record)
+
+    @app.get(
+        "/api/v1/global/optimizations/{run_id}/report.csv",
+        response_class=Response,
+        tags=["global-optimization"],
+    )
+    def global_optimization_report(run_id: str) -> Response:
+        record = app.state.run_store.get_global_optimization(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Optimization run was not found")
+        if record["status"] != "completed" or record["result"] is None:
+            raise HTTPException(status_code=409, detail="Completed optimization result is not available")
+        result = record["result"]
+        stream = StringIO(newline="")
+        writer = csv.writer(stream)
+        writer.writerow(["QSupply synthetic route comparison report"])
+        writer.writerow(["Run ID", record["id"]])
+        writer.writerow(["Created at", record["created_at"]])
+        writer.writerow(["Scenario", record["scenario_id"] or "baseline network"])
+        writer.writerow(["Method", result["algorithm"]])
+        writer.writerow(["Optimality scope", result["optimality_scope"]])
+        writer.writerow(["Objective weights", json.dumps(record["weights"], sort_keys=True)])
+        writer.writerow(["Normalization references", json.dumps(result["normalization_references"], sort_keys=True)])
+        writer.writerow([])
+        writer.writerow(["Plan", "Feasible", "Total cost", "Delay penalty", "Delivery time (days)", "Carbon estimate (kgCO2e)", "Resilience exposure", "Weighted score"])
+        for plan_name in ("baseline", "recovery"):
+            plan = result.get(plan_name)
+            if not plan:
+                continue
+            metrics = plan["metrics"]
+            writer.writerow([
+                plan_name,
+                "yes" if plan_name == "baseline" or result["recovery_feasible"] else "no",
+                metrics["total_cost"],
+                metrics["delay_penalty"],
+                metrics["delivery_time"],
+                metrics["carbon_kg"],
+                metrics["resilience_exposure"],
+                metrics["weighted_objective"],
+            ])
+            writer.writerow([])
+            writer.writerow([f"{plan_name} route alternatives"])
+            writer.writerow(["Shipment", "Route", "Selected", "Modes", "Distance km", "Transit days", "Freight cost", "Carbon estimate kgCO2e", "Resilience exposure", "Transfers"])
+            for shipment_id, selected_route in plan["routes"].items():
+                options = [selected_route, *plan["alternatives"].get(shipment_id, [])]
+                for route in options:
+                    writer.writerow([
+                        shipment_id,
+                        route["id"],
+                        "yes" if route["id"] == selected_route["id"] else "no",
+                        " / ".join(route["modes"]),
+                        route["distance_km"],
+                        route["transit_time"],
+                        route["freight_cost"],
+                        route["carbon_kg"],
+                        route["resilience_exposure"],
+                        route["transfer_count"],
+                    ])
+            writer.writerow([])
+            writer.writerow([f"{plan_name} selected route legs"])
+            writer.writerow(["Shipment", "Route", "Leg", "Mode", "Distance km", "Transit days", "Freight cost", "Carbon estimate kgCO2e", "Link capacity", "Resilience exposure"])
+            for shipment_id, route in plan["routes"].items():
+                for leg in route["legs"]:
+                    writer.writerow([
+                        shipment_id,
+                        route["id"],
+                        leg["link_id"],
+                        leg["mode"],
+                        leg["distance_km"],
+                        leg["transit_time"],
+                        leg["freight_cost"],
+                        leg["carbon_kg"],
+                        leg["capacity"],
+                        leg["resilience_exposure"],
+                    ])
+        writer.writerow([])
+        writer.writerow(["Assumptions", "Synthetic costs, transit times, capacities, emissions factors and disruption inputs; rule-based route analysis; no customs, handling, inventory or reliability model."])
+        return Response(
+            content=stream.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="qsupply-{run_id}-report.csv"'},
+        )
 
     @app.get(
         "/api/v1/global/optimizations/{run_id}/shipments/{shipment_id}/position",

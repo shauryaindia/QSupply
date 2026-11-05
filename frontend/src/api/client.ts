@@ -9,6 +9,7 @@ export type RunResult = components["schemas"]["RunResult"];
 export type SolverId = components["schemas"]["SolverId"];
 export type GlobalShipment = components["schemas"]["GlobalShipment"];
 export type CandidateRoute = components["schemas"]["CandidateRouteResponse"];
+export type RouteIntelligence = components["schemas"]["RouteIntelligenceResponse"];
 export type GlobalOptimization = components["schemas"]["GlobalOptimizationRecord"];
 
 type RunCreate = paths["/api/v1/runs"]["post"]["requestBody"] extends {
@@ -24,6 +25,12 @@ type GlobalRoutesRequest = paths["/api/v1/global/routes"]["post"]["requestBody"]
   : never;
 
 type GlobalOptimizationRequest = paths["/api/v1/global/optimizations"]["post"]["requestBody"] extends {
+  content: { "application/json": infer Body };
+}
+  ? Body
+  : never;
+
+type RouteIntelligenceRequest = paths["/api/v1/global/route-intelligence"]["post"]["requestBody"] extends {
   content: { "application/json": infer Body };
 }
   ? Body
@@ -56,6 +63,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestBlob(path: string): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`);
+  } catch {
+    throw new Error("QSupply API is unreachable. Start the backend on port 8000.");
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+    throw new Error(typeof body?.detail === "string" ? body.detail : `Request failed (${response.status})`);
+  }
+  return response.blob();
+}
+
 export const api = {
   health: () =>
     request<components["schemas"]["HealthResponse"]>("/api/v1/health"),
@@ -71,12 +92,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  routeIntelligence: (input: RouteIntelligenceRequest) =>
+    request<RouteIntelligence>("/api/v1/global/route-intelligence", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   globalOptimizations: () =>
     request<components["schemas"]["GlobalOptimizationListResponse"]>(
       "/api/v1/global/optimizations",
     ),
   globalOptimization: (id: string) =>
     request<GlobalOptimization>(`/api/v1/global/optimizations/${encodeURIComponent(id)}`),
+  optimizationReport: (id: string) =>
+    requestBlob(`/api/v1/global/optimizations/${encodeURIComponent(id)}/report.csv`),
   createGlobalOptimization: (input: GlobalOptimizationRequest) =>
     request<GlobalOptimization>("/api/v1/global/optimizations", {
       method: "POST",

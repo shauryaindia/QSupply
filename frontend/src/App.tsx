@@ -18,6 +18,7 @@ import {
   type CandidateRoute,
   type GlobalOptimization,
   type GlobalShipment,
+  type RouteIntelligence,
   type InstanceSummary,
   type NetworkResponse,
   type RunRecord,
@@ -53,6 +54,14 @@ const solverNames: Record<SolverId, string> = {
   "nearest-neighbor+2-opt": "Nearest Neighbour + 2-opt",
   exact: "Exact Solver",
 };
+
+const objectiveProfiles = {
+  balanced: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
+  "cost-priority": { cost: 70, delivery_time: 10, carbon: 10, resilience: 10 },
+  "fastest-delivery": { cost: 10, delivery_time: 70, carbon: 10, resilience: 10 },
+  "lowest-carbon": { cost: 10, delivery_time: 15, carbon: 65, resilience: 10 },
+  "maximum-resilience": { cost: 15, delivery_time: 15, carbon: 10, resilience: 60 },
+} as const;
 
 const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   overview: {
@@ -235,12 +244,18 @@ function RunTable({
 
 function Overview({
   runs,
+  network,
+  globalShipments,
+  globalRuns,
   capabilities,
   connected,
   onNavigate,
   onOpenRun,
 }: {
   runs: RunRecord[];
+  network: NetworkResponse | null;
+  globalShipments: GlobalShipment[];
+  globalRuns: GlobalOptimization[];
   capabilities: Capabilities | null;
   connected: boolean;
   onNavigate: (page: Page) => void;
@@ -249,7 +264,20 @@ function Overview({
   const completed = runs.filter(
     (run) => run.status === "completed" && run.result,
   );
-  const latest = completed[0]?.result;
+  const latestGlobal = globalRuns.find((run) => run.status === "completed" && run.result);
+  const globalPlan = latestGlobal?.result?.recovery ?? latestGlobal?.result?.baseline;
+  const globalPlanDetail = latestGlobal?.result?.scenario_id
+    ? latestGlobal.result.recovery_feasible
+      ? "Recovered plan from the latest synthetic scenario run"
+      : "Baseline plan shown · disruption recovery was infeasible"
+    : "Baseline plan from the latest synthetic run";
+  const modeCounts = (network?.links ?? []).reduce<Record<string, number>>((counts, link) => {
+    counts[link.mode] = (counts[link.mode] ?? 0) + 1;
+    return counts;
+  }, {});
+  const maxUtilization = globalPlan
+    ? Math.max(0, ...Object.values(globalPlan.capacity_utilization))
+    : null;
   const exactLimit = capabilities?.exact_cvrp_customer_limit ?? 10;
   const chart = completed
     .slice(0, 7)
@@ -281,73 +309,60 @@ function Overview({
       )}
       <div className="metric-grid">
         <MetricCard
-          label="Optimization runs"
-          value={String(runs.length)}
-          detail="Persisted on this device"
-          icon="↗"
+          label="Synthetic shipments"
+          value={String(globalShipments.length)}
+          detail="Sample requests · no live tracking"
+          icon="⇢"
           tone="teal"
         />
         <MetricCard
-          label="Latest route distance"
-          value={
-            latest
-              ? `${formatDistance(latest.total_distance_exact)} units`
-              : "—"
-          }
-          detail={
-            latest
-              ? `${latest.customer_count} customers · ${solverNames[latest.solver]}`
-              : "No completed CVRP result yet"
-          }
+          label="Network footprint"
+          value={network ? `${network.nodes.length} locations` : "—"}
+          detail={network ? `${network.links.length} directed links` : "Network data unavailable"}
           icon="⌖"
           tone="blue"
         />
         <MetricCard
-          label="Latest validation"
-          value={latest ? (latest.feasible ? "Feasible" : "Invalid") : "—"}
-          detail={
-            latest
-              ? "Checked against the source CVRP model"
-              : "Run a supported CVRP instance"
-          }
-          icon="✓"
+          label="Sample shipment volume"
+          value={String(globalShipments.reduce((sum, shipment) => sum + shipment.quantity, 0))}
+          detail={globalShipments[0]?.quantity_unit ?? "No unit configured"}
+          icon="▤"
           tone="green"
         />
-        <MetricCard
-          label="Exact solver limit"
-          value={`${exactLimit} customers`}
-          detail="Maximum supported instance size"
-          icon="◈"
-          tone="violet"
-        />
+        <MetricCard label="Modeled disruption" value={network ? `${network.scenarios.length}` : "—"} detail="Synthetic what-if scenarios" icon="!" tone="violet" />
       </div>
       <div className="metric-grid unavailable-metrics">
         <MetricCard
-          label="Transportation cost"
-          value="—"
-          detail="Not evaluated by CVRP distance objective"
+          label="Latest plan cost"
+          value={globalPlan ? `${formatNumber(globalPlan.metrics.total_cost, 1)} ${network?.cost_unit ?? ""}` : "—"}
+          detail={latestGlobal ? globalPlanDetail : "Run the global recovery planner"}
           icon="$"
         />
         <MetricCard
-          label="Delivery time"
-          value="—"
-          detail="Not included in CVRP result data"
+          label="Planned delivery time"
+          value={globalPlan ? `${formatNumber(globalPlan.metrics.delivery_time)} ${network?.time_unit ?? ""}` : "—"}
+          detail={globalPlan ? "Sum of modeled shipment transit times" : "No completed global run"}
           icon="◷"
         />
         <MetricCard
-          label="Carbon impact"
-          value="—"
-          detail="Not included in CVRP result data"
+          label="Estimated emissions"
+          value={globalPlan ? `${formatNumber(globalPlan.metrics.carbon_kg)} ${network?.carbon_unit ?? ""}` : "—"}
+          detail="Synthetic mode factors · not regulatory reporting"
           icon="◇"
         />
         <MetricCard
-          label="Network utilization"
-          value="—"
-          detail="No multimodal route assignment is run"
+          label="Highest link utilization"
+          value={maxUtilization === null ? "—" : `${formatNumber(maxUtilization * 100, 1)}%`}
+          detail={globalPlan ? "Among links used in the latest plan" : "No completed assignment"}
           icon="▤"
         />
       </div>
       <div className="dashboard-grid overview-grid">
+        <Panel title="Transport link mix" subtitle="Count of modeled directed network links by mode">
+          {Object.keys(modeCounts).length ? (
+            <div className="chart-wrap"><Suspense fallback={<div className="chart-loading">Loading chart…</div>}><Charts data={Object.entries(modeCounts).map(([label, value]) => ({ label: label.toUpperCase(), value }))} variant="mode-distribution" /></Suspense></div>
+          ) : <EmptyState title="Network data unavailable" detail="Mode distribution requires a network returned by the API." />}
+        </Panel>
         <Panel
           title="Route distance history"
           subtitle="Actual completed runs, shown in execution order"
@@ -407,9 +422,9 @@ function Overview({
               <span className="status-mark mark-amber">○</span>
               <div>
                 <strong>Multimodal optimization</strong>
-                <small>Network models only</small>
+                <small>Bounded routes + capacity-aware recovery</small>
               </div>
-              <Badge tone="warn">Planned</Badge>
+              <Badge tone="good">Available · synthetic</Badge>
             </div>
             <div>
               <span className="status-mark mark-muted">○</span>
@@ -422,6 +437,19 @@ function Overview({
           </div>
         </Panel>
       </div>
+      <Panel
+        title="Recent global recovery runs"
+        subtitle="Persisted results from the multimodal route assignment engine"
+      >
+        {globalRuns.length ? (
+          <div className="table-scroll"><table><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Recovery</th><th>Plan cost</th><th>Estimated carbon</th></tr></thead><tbody>
+            {globalRuns.slice(0, 5).map((run) => {
+              const plan = run.result?.recovery ?? run.result?.baseline;
+              return <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{run.scenario_id ?? "Baseline"}</td><td>{run.result ? (run.result.recovery_feasible ? "Feasible" : "Infeasible") : run.status}</td><td>{plan && network ? `${formatNumber(plan.metrics.total_cost, 1)} ${network.cost_unit}` : "—"}</td><td>{plan && network ? `${formatNumber(plan.metrics.carbon_kg)} ${network.carbon_unit} est.` : "—"}</td></tr>;
+            })}
+          </tbody></table></div>
+        ) : <EmptyState title="No global runs yet" detail="Run the synthetic recovery workflow to populate this table." />}
+      </Panel>
       <Panel
         title="Recent optimization runs"
         subtitle="Persisted local history from the actual CVRP engine"
@@ -439,9 +467,9 @@ function Overview({
       <div className="synthetic-note alert-note">
         <span>!</span>
         <div>
-          <strong>Disruption monitoring is not connected.</strong> The synthetic
-          corridor-closure scenario is a network-model overlay only; no live
-          alerts or recovery plan are available.
+          <strong>No live disruption feed is connected.</strong> The synthetic
+          corridor restriction can be evaluated by the recovery planner; its
+          outputs describe only the configured demonstration scenario.
         </div>
         <button className="text-button" onClick={() => onNavigate("network")}>
           View network <span>→</span>
@@ -450,9 +478,9 @@ function Overview({
       <div className="synthetic-note">
         <span>i</span>
         <div>
-          <strong>Sample instances are synthetic.</strong> Distances are
-          unitless costs from deterministic CVRP examples. This dashboard has no
-          live shipment, map, time, carbon or network-utilization feed.
+          <strong>Global inputs are synthetic.</strong> Costs, transit times,
+          capacities and carbon factors are demonstration values, not live
+          operational observations or regulatory estimates.
         </div>
       </div>
     </>
@@ -788,11 +816,20 @@ function ResultDetails({ run }: { run: RunRecord }) {
   );
 }
 
-function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
+function NetworkExplorer({
+  network,
+  onRunsChange,
+}: {
+  network: NetworkResponse | null;
+  onRunsChange: (runs: GlobalOptimization[]) => void;
+}) {
   const [shipments, setShipments] = useState<GlobalShipment[]>([]);
   const [scenarioId, setScenarioId] = useState("");
   const [shipmentId, setShipmentId] = useState("");
   const [routeCandidates, setRouteCandidates] = useState<CandidateRoute[]>([]);
+  const [routeIntelligence, setRouteIntelligence] = useState<RouteIntelligence | null>(null);
+  const [routeRanking, setRouteRanking] = useState("balanced");
+  const [reportLoading, setReportLoading] = useState(false);
   const [activeRun, setActiveRun] = useState<GlobalOptimization | null>(null);
   const [history, setHistory] = useState<GlobalOptimization[]>([]);
   const [weights, setWeights] = useState({
@@ -801,6 +838,7 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
     carbon: 20,
     resilience: 15,
   });
+  const [objectiveProfile, setObjectiveProfile] = useState("balanced");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -829,6 +867,7 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
         setShipments(shipmentResponse);
         setShipmentId((current) => current || shipmentResponse[0]?.id || "");
         setHistory(historyResponse.items);
+        onRunsChange(historyResponse.items);
         setScenarioId((current) => current || network.scenarios[0]?.id || "");
       })
       .catch((cause: unknown) => {
@@ -837,27 +876,36 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
     return () => {
       active = false;
     };
-  }, [network]);
+  }, [network, onRunsChange]);
 
   useEffect(() => {
-    if (!network || !shipmentId || activeRun) return;
+    if (!network || !shipmentId) return;
     let active = true;
+    setError(null);
     void api
-      .globalRoutes({
+      .routeIntelligence({
         shipment_id: shipmentId,
         scenario_id: scenarioId || null,
+        weights,
         max_routes: 8,
       })
-      .then((routes) => {
-        if (active) setRouteCandidates(routes);
+      .then((analysis) => {
+        if (active) {
+          setRouteIntelligence(analysis);
+          setRouteCandidates(analysis.routes);
+        }
       })
       .catch((cause: unknown) => {
-        if (active) setError(cause instanceof Error ? cause.message : "Unable to generate route candidates.");
+        if (active) {
+          setRouteIntelligence(null);
+          setRouteCandidates([]);
+          setError(cause instanceof Error ? cause.message : "Unable to generate route analysis.");
+        }
       });
     return () => {
       active = false;
     };
-  }, [network, shipmentId, scenarioId, activeRun]);
+  }, [network, shipmentId, scenarioId, weights]);
 
   const result = activeRun?.result;
   const selectedPlan = result
@@ -866,10 +914,25 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
       : result.baseline
     : null;
   const plannedRoute = selectedPlan?.routes[shipmentId];
-  const routes = plannedRoute
+  const routePool = routeIntelligence?.routes ?? routeCandidates;
+  const planRoutes = plannedRoute
     ? [plannedRoute, ...(selectedPlan?.alternatives[shipmentId] ?? [])]
-    : routeCandidates;
+    : [];
+  const routeById = new Map([...routePool, ...planRoutes].map((route) => [route.id, route]));
+  const rankedRouteIds = routeIntelligence?.rankings[routeRanking] ?? [];
+  const routes = [...routeById.values()].sort((left, right) => {
+    const leftRank = rankedRouteIds.indexOf(left.id);
+    const rightRank = rankedRouteIds.indexOf(right.id);
+    return (leftRank < 0 ? Number.MAX_SAFE_INTEGER : leftRank) - (rightRank < 0 ? Number.MAX_SAFE_INTEGER : rightRank)
+      || left.id.localeCompare(right.id);
+  });
   const selectedRoute = routes.find((route) => route.id === selectedRouteId) ?? routes[0] ?? null;
+  const selectedAnalysis = selectedRoute ? routeIntelligence?.analyses[selectedRoute.id] : undefined;
+  const routeRankLabel = (category: string) => {
+    if (!selectedRoute || !routeIntelligence) return "—";
+    const index = routeIntelligence.rankings[category]?.indexOf(selectedRoute.id) ?? -1;
+    return index < 0 ? "—" : String(index + 1);
+  };
   const scenario = network?.scenarios.find((item) => item.id === scenarioId);
   const disruptedLinkIds = scenario
     ? [...scenario.closed_link_ids, ...Object.keys(scenario.capacity_overrides)]
@@ -887,8 +950,8 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
 
   useEffect(() => {
     if (selectedRouteId && routes.some((route) => route.id === selectedRouteId)) return;
-    setSelectedRouteId(routes[0]?.id ?? null);
-  }, [routes, selectedRouteId]);
+    setSelectedRouteId(routeIntelligence?.recommended_route_id ?? routes[0]?.id ?? null);
+  }, [routes, selectedRouteId, routeIntelligence?.recommended_route_id]);
 
   useEffect(() => {
     if (!activeRun || !shipmentId || !chosenRouteIsPlanned || !selectedRoute) {
@@ -934,7 +997,9 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
         max_routes: 8,
       });
       setActiveRun(run);
-      setHistory((items) => [run, ...items.filter((item) => item.id !== run.id)]);
+      const updatedHistory = [run, ...history.filter((item) => item.id !== run.id)];
+      setHistory(updatedHistory);
+      onRunsChange(updatedHistory);
       const selected = scenarioId
         ? run.result?.recovery?.routes[shipmentId]
         : run.result?.baseline.routes[shipmentId];
@@ -943,6 +1008,27 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
       setError(cause instanceof Error ? cause.message : "The optimization request failed.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const downloadReport = async () => {
+    if (!activeRun || activeRun.status !== "completed") return;
+    setReportLoading(true);
+    setError(null);
+    try {
+      const blob = await api.optimizationReport(activeRun.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `qsupply-${activeRun.id}-report.csv`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not download the saved report.");
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -956,6 +1042,7 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
   };
 
   const updateWeight = (key: keyof typeof weights, value: number) => {
+    setObjectiveProfile("custom");
     setWeights((current) => ({
       ...current,
       [key]: Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0,
@@ -1030,6 +1117,9 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
             modeFilters={modeFilters}
             movement={movement}
             selectedLocation={selectedLocation}
+            linkUtilization={chosenRouteIsPlanned ? selectedPlan?.capacity_utilization ?? {} : {}}
+            linkUsage={chosenRouteIsPlanned ? selectedPlan?.capacity_usage ?? {} : {}}
+            capacityOverrides={scenario?.capacity_overrides ?? {}}
             onSelectLocation={selectLocation}
           />
           {selectedLocation && (
@@ -1054,6 +1144,21 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
                 </select>
                 {shipment && <small>{shipment.quantity} {shipment.quantity_unit} · {shipment.cargo_category} · priority {shipment.priority}</small>}
               </label>
+              <label>
+                Objective profile
+                <select aria-label="Objective profile" value={objectiveProfile} onChange={(event) => {
+                  const selected = event.target.value;
+                  setObjectiveProfile(selected);
+                  if (selected !== "custom") setWeights(objectiveProfiles[selected as keyof typeof objectiveProfiles]);
+                }}>
+                  <option value="balanced">Balanced optimization · 40/25/20/15</option>
+                  <option value="cost-priority">Cost priority · 70/10/10/10</option>
+                  <option value="fastest-delivery">Fastest delivery · 10/70/10/10</option>
+                  <option value="lowest-carbon">Lowest carbon · 10/15/65/10</option>
+                  <option value="maximum-resilience">Maximum resilience · 15/15/10/60</option>
+                  <option value="custom">Custom weights</option>
+                </select>
+              </label>
               <div className="objective-weight-grid">
                 {(["cost", "delivery_time", "carbon", "resilience"] as const).map((key) => (
                   <label key={key}>
@@ -1076,7 +1181,39 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
             </div>
           </Panel>
 
+          <Panel title="Route alternatives" subtitle="Computed from the generated feasible candidate routes">
+            {scenarioId && routeIntelligence && <div className="recovery-status"><Badge tone={routeIntelligence.recovery_feasible ? "good" : "bad"}>{routeIntelligence.recovery_feasible ? "Joint shipment recovery feasible" : "No feasible joint shipment assignment"}</Badge><span>Checks shared capacities across all synthetic shipments.</span></div>}
+            <label className="route-ranking-control">
+              Rank routes by
+              <select aria-label="Route ranking" value={routeRanking} onChange={(event) => setRouteRanking(event.target.value)}>
+                <option value="balanced">Best balanced score</option>
+                <option value="cost">Lowest modeled cost</option>
+                <option value="time">Fastest delivery</option>
+                <option value="carbon">Lowest estimated carbon</option>
+                <option value="resilience">Lowest exposure</option>
+              </select>
+            </label>
+            {routes.length ? (
+              <div className="route-alternative-list">
+                {routes.map((route, index) => {
+                  const analysis = routeIntelligence?.analyses[route.id];
+                  const selected = selectedRoute?.id === route.id;
+                  const recommended = route.id === routeIntelligence?.recommended_route_id;
+                  return (
+                    <button className={`route-alternative ${selected ? "selected" : ""}`} key={route.id} onClick={() => setSelectedRouteId(route.id)} aria-pressed={selected}>
+                      <span className="route-alternative-top"><strong>Route {index + 1}</strong>{recommended && <Badge tone="good">Best balanced route</Badge>}{routeIntelligence?.assignment_route_id === route.id && <Badge tone="blue">Joint assignment</Badge>}{planRoutes.some((item) => item.id === route.id) && <Badge tone="blue">Saved plan</Badge>}</span>
+                      <span className="route-alternative-modes">{route.modes.join(" → ")} · {route.transfer_count} transfers · {route.legs.length} legs</span>
+                      <span className="route-alternative-metrics"><span>{formatNumber(analysis?.total_cost ?? route.freight_cost, 1)} {network.cost_unit}</span><span>{formatNumber(route.transit_time)} days</span><span>{formatNumber(route.carbon_kg)} kgCO₂e est.</span></span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : <EmptyState title="No feasible route alternatives" detail={error ?? "The selected scenario currently produces no route candidates for this shipment."} />}
+            {routeIntelligence && <small className="route-score-note">Balanced ranking uses normalized cost, delivery time, synthetic carbon and resilience exposure with fixed baseline references. Search is bounded to generated candidates.</small>}
+          </Panel>
+
           <Panel title="Route plan" subtitle={result ? `Run ${activeRun?.id.slice(0, 8)} · ${result.algorithm}` : "Generate route options or run recovery optimization"}>
+            {activeRun?.status === "completed" && <button className="secondary-button report-download" onClick={() => void downloadReport()} disabled={reportLoading}>{reportLoading ? "Preparing report…" : "Download saved comparison CSV"}</button>}
             {result && (
               <div className="recovery-status">
                 <Badge tone={result.recovery_feasible ? "good" : "bad"}>
@@ -1110,13 +1247,32 @@ function NetworkExplorer({ network }: { network: NetworkResponse | null }) {
                 <div><span>Delay penalties</span><strong>{formatNumber(result.baseline.metrics.delay_penalty, 1)} → {formatNumber(result.recovery?.metrics.delay_penalty, 1)} {network.cost_unit}</strong></div>
               </div>
             )}
+            {result?.recovery && result.scenario_id && (
+              <div className="scenario-delta-grid" aria-label="Baseline versus recovery changes">
+                <div><span>Cost impact</span><strong>{formatNumber(result.recovery.metrics.total_cost - result.baseline.metrics.total_cost, 1)} {network.cost_unit}</strong><small>{result.recovery.metrics.total_cost >= result.baseline.metrics.total_cost ? "additional cost" : "cost saved"} vs baseline</small></div>
+                <div><span>Delivery time</span><strong>{formatNumber(result.baseline.metrics.delivery_time - result.recovery.metrics.delivery_time)} {network.time_unit}</strong><small>{result.baseline.metrics.delivery_time >= result.recovery.metrics.delivery_time ? "saved" : "additional"} vs baseline</small></div>
+                <div><span>Carbon impact</span><strong>{formatNumber(result.baseline.metrics.carbon_kg - result.recovery.metrics.carbon_kg)} {network.carbon_unit}</strong><small>{result.baseline.metrics.carbon_kg >= result.recovery.metrics.carbon_kg ? "estimated reduction" : "estimated increase"} vs baseline</small></div>
+              </div>
+            )}
             {result?.failure_reason && <div className="network-error">{result.failure_reason}</div>}
+            {selectedRoute && selectedAnalysis && (
+              <div className="route-analysis-card">
+                <div className="analysis-eyebrow">DETERMINISTIC ROUTE INTELLIGENCE · NO LLM</div>
+                <h3>{selectedAnalysis.recommendation}</h3>
+                <div className="route-delta-strip">
+                  <div><span>Cost</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.cost_savings), 1)} {network.cost_unit}</strong><small>{selectedAnalysis.delta_vs_baseline.cost_savings >= 0 ? "saved" : "additional"} · {selectedAnalysis.delta_vs_baseline.cost_savings_percent === null ? "—" : `${formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.cost_savings_percent), 1)}%`}</small></div>
+                  <div><span>Time</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.time_savings_days))} {network.time_unit}</strong><small>{selectedAnalysis.delta_vs_baseline.time_savings_days >= 0 ? "saved" : "additional"}</small></div>
+                  <div><span>Carbon</span><strong>{formatNumber(Math.abs(selectedAnalysis.delta_vs_baseline.carbon_savings_kg))} {network.carbon_unit}</strong><small>{selectedAnalysis.delta_vs_baseline.carbon_savings_kg >= 0 ? "estimated saved" : "estimated additional"}</small></div>
+                </div>
+                <div className="analysis-ranks">Rank: cost #{routeRankLabel("cost")} · time #{routeRankLabel("time")} · carbon #{routeRankLabel("carbon")} · resilience #{routeRankLabel("resilience")} · balanced #{routeRankLabel("balanced")}</div>
+                <div className="analysis-segment-highlights"><span>{selectedAnalysis.deadline_met === null ? "No shipment deadline configured" : selectedAnalysis.deadline_met ? `Deadline buffer: ${formatNumber(selectedAnalysis.deadline_slack_days)} days` : `Deadline miss: ${formatNumber(Math.abs(selectedAnalysis.deadline_slack_days ?? 0))} days`}</span><span>Largest cost leg: {selectedAnalysis.largest_cost_leg_id ?? "—"}</span><span>Largest carbon leg: {selectedAnalysis.largest_carbon_leg_id ?? "—"}</span></div>
+                <div className="carbon-mode-breakdown"><strong>Estimated carbon by mode</strong>{Object.entries(selectedAnalysis.carbon_by_mode_kg).map(([mode, value]) => <span key={mode}>{mode}: {formatNumber(value)} kgCO₂e</span>)}</div>
+                <div className="analysis-findings"><div><strong>Advantages</strong><ul>{selectedAnalysis.advantages.map((item) => <li key={item}>{item}</li>)}</ul></div><div><strong>Trade-offs</strong><ul>{selectedAnalysis.tradeoffs.map((item) => <li key={item}>{item}</li>)}</ul></div></div>
+                {selectedAnalysis.maximum_capacity_utilization !== null && <small>Route bottleneck utilization: {formatNumber(selectedAnalysis.maximum_capacity_utilization * 100, 1)}% of the tightest leg capacity.</small>}
+              </div>
+            )}
             {selectedRoute && (
-              <ol className="selected-route-legs">
-                {selectedRoute.legs.map((leg) => (
-                  <li key={leg.link_id}><span className={`mode-tag mode-${leg.mode}`}>{leg.mode}</span><span>{network.nodes.find((node) => node.id === leg.origin_id)?.label} → {network.nodes.find((node) => node.id === leg.destination_id)?.label}</span><small>{formatNumber(leg.distance_km)} km · {formatNumber(leg.transit_time)} days</small></li>
-                ))}
-              </ol>
+              <div className="table-scroll route-leg-table"><table><thead><tr><th>Segment</th><th>Mode</th><th>Distance</th><th>Time</th><th>Cost</th><th>Carbon estimate</th><th>Shipment capacity use</th></tr></thead><tbody>{selectedRoute.legs.map((leg) => <tr key={leg.link_id}><td>{network.nodes.find((node) => node.id === leg.origin_id)?.label} → {network.nodes.find((node) => node.id === leg.destination_id)?.label}</td><td><span className={`mode-tag mode-${leg.mode}`}>{leg.mode}</span></td><td>{formatNumber(leg.distance_km)} km</td><td>{formatNumber(leg.transit_time)} days</td><td>{formatNumber(leg.freight_cost, 1)} {network.cost_unit}</td><td>{formatNumber(leg.carbon_kg)} kgCO₂e</td><td>{leg.capacity === null ? "Unbounded" : `${formatNumber(shipment?.quantity ?? 0)} / ${leg.capacity} ${network.quantity_unit} · ${formatNumber(((shipment?.quantity ?? 0) / leg.capacity) * 100, 1)}%`}</td></tr>)}</tbody></table></div>
             )}
             {!selectedRoute && !loading && <EmptyState title="No route option" detail="Choose a supported sample shipment or a less restrictive scenario." />}
           </Panel>
@@ -1455,6 +1611,8 @@ export default function App() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [instances, setInstances] = useState<InstanceSummary[]>([]);
   const [network, setNetwork] = useState<NetworkResponse | null>(null);
+  const [globalShipments, setGlobalShipments] = useState<GlobalShipment[]>([]);
+  const [globalRuns, setGlobalRuns] = useState<GlobalOptimization[]>([]);
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [activeRun, setActiveRun] = useState<RunRecord | null>(null);
   const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null);
@@ -1473,17 +1631,21 @@ export default function App() {
     try {
       const health = await api.health();
       setConnected(health.status === "ok");
-      const [capabilityData, instanceData, runData, networkData] =
+      const [capabilityData, instanceData, runData, networkData, shipmentData, globalRunData] =
         await Promise.all([
           api.capabilities(),
           api.instances(),
           api.runs(),
           api.globalNetwork(),
+          api.globalShipments(),
+          api.globalOptimizations(),
         ]);
       setCapabilities(capabilityData);
       setInstances(instanceData);
       setRuns(runData.items);
       setNetwork(networkData);
+      setGlobalShipments(shipmentData);
+      setGlobalRuns(globalRunData.items);
     } catch (cause) {
       setConnected(false);
       setLoadError(
@@ -1661,6 +1823,9 @@ export default function App() {
           ) : page === "overview" ? (
             <Overview
               runs={runs}
+              network={network}
+              globalShipments={globalShipments}
+              globalRuns={globalRuns}
               capabilities={capabilities}
               connected={connected}
               onNavigate={setPage}
@@ -1675,7 +1840,7 @@ export default function App() {
               onSelectRun={setSelectedRun}
             />
           ) : page === "network" ? (
-            <NetworkExplorer network={network} />
+            <NetworkExplorer network={network} onRunsChange={setGlobalRuns} />
           ) : page === "benchmarking" ? (
             <Benchmarking runs={runs} onOpenRun={openRun} />
           ) : (

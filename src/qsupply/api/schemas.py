@@ -183,6 +183,15 @@ class GlobalRoutesRequest(BaseModel):
     max_routes: int = Field(default=8, ge=1, le=8)
 
 
+class RouteIntelligenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shipment_id: str = Field(min_length=1)
+    scenario_id: str | None = None
+    weights: ObjectiveWeightsInput = Field(default_factory=ObjectiveWeightsInput)
+    max_routes: int = Field(default=8, ge=1, le=8)
+
+
 class GlobalOptimizationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -202,6 +211,7 @@ class RouteLegResponse(BaseModel):
     carbon_kg: float
     capacity: int | None
     geometry: list[tuple[float, float]]
+    resilience_exposure: float
 
 
 class CandidateRouteResponse(BaseModel):
@@ -219,6 +229,49 @@ class CandidateRouteResponse(BaseModel):
     transfer_count: int
     bottleneck_capacity: int | None
     geometry: list[tuple[float, float]]
+
+
+class RouteDeltaResponse(BaseModel):
+    baseline_route_id: str
+    cost_savings: float
+    cost_savings_percent: float | None
+    time_savings_days: float
+    carbon_savings_kg: float
+    carbon_savings_percent: float | None
+
+
+class RouteAnalysisResponse(BaseModel):
+    route_id: str
+    total_cost: float
+    delay_penalty: float
+    deadline_met: bool | None
+    deadline_slack_days: float | None
+    balanced_score: float
+    maximum_capacity_utilization: float | None
+    carbon_by_mode_kg: dict[str, float]
+    largest_cost_leg_id: str | None
+    largest_carbon_leg_id: str | None
+    delta_vs_baseline: RouteDeltaResponse
+    recommendation: str
+    advantages: list[str]
+    tradeoffs: list[str]
+    analysis_type: str = "deterministic_rule_based"
+    uses_llm: bool = False
+
+
+class RouteIntelligenceResponse(BaseModel):
+    shipment_id: str
+    scenario_id: str | None
+    synthetic: bool = True
+    recommended_route_id: str
+    assignment_route_id: str | None
+    baseline_route: CandidateRouteResponse
+    routes: list[CandidateRouteResponse]
+    rankings: dict[str, list[str]]
+    analyses: dict[str, RouteAnalysisResponse]
+    recovery_feasible: bool
+    normalization_references: dict[str, float]
+    assumptions: list[str]
 
 
 class PlanMetricsResponse(BaseModel):

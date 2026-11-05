@@ -33,6 +33,7 @@ class RouteLeg:
     carbon_kg: float
     capacity: int | None
     geometry: tuple[Coordinate, ...]
+    resilience_exposure: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -175,6 +176,7 @@ def _route_from_links(
                 carbon_kg=float(link.carbon_per_quantity_unit * shipment.quantity),
                 capacity=effective.capacity,
                 geometry=points,
+                resilience_exposure=float(link.resilience_exposure),
             )
         )
     return CandidateRoute(
@@ -351,6 +353,12 @@ def validate_candidate_route(
             or leg.mode != expected_leg.mode
             or leg.capacity != expected_leg.capacity
             or leg.geometry != expected_leg.geometry
+            or not isclose(
+                leg.resilience_exposure,
+                expected_leg.resilience_exposure,
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            )
         ):
             raise ValueError("route leg metadata does not match its transport link")
         for field in (

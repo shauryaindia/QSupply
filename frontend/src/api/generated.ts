@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/global/route-intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Global Route Intelligence */
+        post: operations["global_route_intelligence_api_v1_global_route_intelligence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/global/optimizations": {
         parameters: {
             query?: never;
@@ -184,6 +201,23 @@ export interface paths {
         };
         /** Get Global Optimization */
         get: operations["get_global_optimization_api_v1_global_optimizations__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/global/optimizations/{run_id}/report.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global Optimization Report */
+        get: operations["global_optimization_report_api_v1_global_optimizations__run_id__report_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -616,6 +650,48 @@ export interface components {
             /** Weighted Objective */
             weighted_objective: number;
         };
+        /** RouteAnalysisResponse */
+        RouteAnalysisResponse: {
+            /** Route Id */
+            route_id: string;
+            /** Total Cost */
+            total_cost: number;
+            /** Delay Penalty */
+            delay_penalty: number;
+            /** Deadline Met */
+            deadline_met: boolean | null;
+            /** Deadline Slack Days */
+            deadline_slack_days: number | null;
+            /** Balanced Score */
+            balanced_score: number;
+            /** Maximum Capacity Utilization */
+            maximum_capacity_utilization: number | null;
+            /** Carbon By Mode Kg */
+            carbon_by_mode_kg: {
+                [key: string]: number;
+            };
+            /** Largest Cost Leg Id */
+            largest_cost_leg_id: string | null;
+            /** Largest Carbon Leg Id */
+            largest_carbon_leg_id: string | null;
+            delta_vs_baseline: components["schemas"]["RouteDeltaResponse"];
+            /** Recommendation */
+            recommendation: string;
+            /** Advantages */
+            advantages: string[];
+            /** Tradeoffs */
+            tradeoffs: string[];
+            /**
+             * Analysis Type
+             * @default deterministic_rule_based
+             */
+            analysis_type: string;
+            /**
+             * Uses Llm
+             * @default false
+             */
+            uses_llm: boolean;
+        };
         /** RouteAssignmentResponse */
         RouteAssignmentResponse: {
             /** Routes */
@@ -637,6 +713,69 @@ export interface components {
             };
             /** Method */
             method: string;
+        };
+        /** RouteDeltaResponse */
+        RouteDeltaResponse: {
+            /** Baseline Route Id */
+            baseline_route_id: string;
+            /** Cost Savings */
+            cost_savings: number;
+            /** Cost Savings Percent */
+            cost_savings_percent: number | null;
+            /** Time Savings Days */
+            time_savings_days: number;
+            /** Carbon Savings Kg */
+            carbon_savings_kg: number;
+            /** Carbon Savings Percent */
+            carbon_savings_percent: number | null;
+        };
+        /** RouteIntelligenceRequest */
+        RouteIntelligenceRequest: {
+            /** Shipment Id */
+            shipment_id: string;
+            /** Scenario Id */
+            scenario_id?: string | null;
+            weights?: components["schemas"]["ObjectiveWeightsInput"];
+            /**
+             * Max Routes
+             * @default 8
+             */
+            max_routes: number;
+        };
+        /** RouteIntelligenceResponse */
+        RouteIntelligenceResponse: {
+            /** Shipment Id */
+            shipment_id: string;
+            /** Scenario Id */
+            scenario_id: string | null;
+            /**
+             * Synthetic
+             * @default true
+             */
+            synthetic: boolean;
+            /** Recommended Route Id */
+            recommended_route_id: string;
+            /** Assignment Route Id */
+            assignment_route_id: string | null;
+            baseline_route: components["schemas"]["CandidateRouteResponse"];
+            /** Routes */
+            routes: components["schemas"]["CandidateRouteResponse"][];
+            /** Rankings */
+            rankings: {
+                [key: string]: string[];
+            };
+            /** Analyses */
+            analyses: {
+                [key: string]: components["schemas"]["RouteAnalysisResponse"];
+            };
+            /** Recovery Feasible */
+            recovery_feasible: boolean;
+            /** Normalization References */
+            normalization_references: {
+                [key: string]: number;
+            };
+            /** Assumptions */
+            assumptions: string[];
         };
         /** RouteLegResponse */
         RouteLegResponse: {
@@ -663,6 +802,8 @@ export interface components {
                 number,
                 number
             ][];
+            /** Resilience Exposure */
+            resilience_exposure: number;
         };
         /** RunCreateRequest */
         RunCreateRequest: {
@@ -1018,6 +1159,39 @@ export interface operations {
             };
         };
     };
+    global_route_intelligence_api_v1_global_route_intelligence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouteIntelligenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RouteIntelligenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_global_optimizations_api_v1_global_optimizations_get: {
         parameters: {
             query?: {
@@ -1101,6 +1275,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GlobalOptimizationRecord"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    global_optimization_report_api_v1_global_optimizations__run_id__report_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

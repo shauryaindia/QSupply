@@ -46,11 +46,62 @@ time, carbon and route resilience exposure. The default weights are 40/25/20/15
 percent. A late shipment is penalized; the shipment's maximum transit time is a
 hard route feasibility limit.
 
-Resilience exposure is the weighted sum of route-level synthetic exposure
-values. It describes exposure to modeled risk and is not recovery capability.
+Resilience exposure is the sum of the synthetic per-link exposure scores on a
+route. It describes exposure to modeled risk and is not recovery capability.
 Recovery capability is independently reported as whether all shipments can be
 reassigned under the disruption scenario; recovered cost, time, carbon and
 exposure are reported separately when a feasible assignment exists.
+
+## Route comparison and deterministic intelligence
+
+`POST /api/v1/global/route-intelligence` returns the baseline-selected route,
+the generated routes under the requested scenario, five route rankings (cost,
+time, carbon, exposure and balanced score), and computed route analyses. Cost
+ranking includes each shipment's configured late-delivery penalty. A comparison
+reports savings as baseline metric minus alternative metric; the percentage is
+relative to the baseline and is unavailable when that baseline metric is zero.
+Deadline slack is deadline minus modeled route transit time. Capacity use is
+shipment quantity divided by each finite link capacity, with the route maximum
+reported as its bottleneck utilization. The balanced route recommendation is a
+single-shipment ranking; `assignment_route_id` separately identifies the route
+selected by the joint assignment that checks shared capacity across all demo
+shipments. A recommended route is not called the joint plan unless these IDs
+match.
+
+The balanced score is the configured weighted sum of normalized cost, time,
+carbon and exposure. Normalization references are generated once from the
+baseline candidate routes (maximum per-shipment route component, weighted by
+shipment priority, with a one-unit floor) and reused for disruption routes.
+This makes scenario scores comparable for the same problem input. Route
+generation is bounded, so rankings are only among generated candidates and the
+assignment method is exact only over those candidates.
+
+The route explanation provider protocol consumes structured computed facts.
+The implementation is deterministic rule-based analysis: it reports actual
+metric deltas, ranks first, deadline slack, carbon by transport mode, and the
+largest cost/carbon leg. It does not call an LLM, and no generated explanation
+is represented as LLM output. The UI and CSV report label these facts as
+synthetic estimates. The carbon factor in this demonstration is a synthetic
+kgCO2e-per-load-unit factor per link; it is multiplied by shipment quantity and
+summed, without a cargo-weight or tonne-kilometre denominator. It is not a
+regulatory carbon accounting method.
+
+There are no modeled port-handling charges, customs delays, inventory holding
+costs, route reliability observations or historical service-level data. Those
+values are unavailable, not assumed to be zero in a real-world business case.
+The fixed synthetic profile includes a deadline and per-day delay penalty; its
+maximum transit time is a hard constraint.
+
+Completed global optimization runs can be exported at
+`GET /api/v1/global/optimizations/{run_id}/report.csv`. The CSV is generated
+from the saved result and includes baseline/recovery plan metrics and selected
+route legs with units and assumptions. It contains no live external data.
+
+The dashboard's built-in profiles (balanced, cost priority, fastest delivery,
+lowest carbon, maximum resilience) are percentage presets. Custom weights are
+accepted only when they total 100. The demonstrated disruption catalog contains
+one fixed synthetic corridor scenario; arbitrary scenario creation and editing
+are not implemented.
 
 ## Simulation
 

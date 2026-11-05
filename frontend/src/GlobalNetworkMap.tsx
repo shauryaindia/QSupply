@@ -85,6 +85,9 @@ export default function GlobalNetworkMap({
   modeFilters,
   movement,
   selectedLocation,
+  linkUtilization,
+  linkUsage,
+  capacityOverrides,
   onSelectLocation,
 }: {
   network: NetworkResponse;
@@ -94,6 +97,9 @@ export default function GlobalNetworkMap({
   modeFilters: Set<string>;
   movement: ShipmentPosition | null;
   selectedLocation: NetworkNode | null;
+  linkUtilization: Record<string, number>;
+  linkUsage: Record<string, number>;
+  capacityOverrides: Record<string, number>;
   onSelectLocation: (location: NetworkNode) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -136,6 +142,11 @@ export default function GlobalNetworkMap({
       if (!modeFilters.has(link.mode)) return;
       const coordinates = link.geometry as [number, number][];
       if (coordinates.length < 2) return;
+      const capacity = capacityOverrides[link.id] ?? link.capacity;
+      const utilization = linkUtilization[link.id];
+      const usageText = utilization === undefined
+        ? ""
+        : ` · assigned ${linkUsage[link.id] ?? 0}/${capacity ?? "∞"} ${link.capacity_unit} (${(utilization * 100).toFixed(1)}%)`;
       splitAtAntimeridian(coordinates).forEach((segment) =>
         L.polyline(segment, {
           color: disrupted.has(link.id) ? "#d54646" : modeColors[link.mode] ?? "#77899b",
@@ -144,7 +155,7 @@ export default function GlobalNetworkMap({
           dashArray: disrupted.has(link.id) ? "8 7" : undefined,
         })
           .bindTooltip(
-            `${link.mode.toUpperCase()} · ${link.distance_km?.toLocaleString() ?? "—"} km · ${link.capacity ?? "unbounded"} ${link.capacity_unit}${disrupted.has(link.id) ? " · scenario constrained" : ""}`,
+            `${link.mode.toUpperCase()} · ${link.distance_km?.toLocaleString() ?? "—"} km · ${capacity ?? "unbounded"} ${link.capacity_unit}${usageText}${disrupted.has(link.id) ? " · scenario constrained" : ""}`,
           )
           .addTo(group),
       );
@@ -199,6 +210,9 @@ export default function GlobalNetworkMap({
     modeFilters,
     movement,
     selectedLocation,
+    linkUtilization,
+    linkUsage,
+    capacityOverrides,
     onSelectLocation,
   ]);
 

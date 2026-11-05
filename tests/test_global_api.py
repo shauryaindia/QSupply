@@ -56,6 +56,40 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
             404,
         )
 
+    def test_route_intelligence_uses_route_metrics_and_fixed_baseline(self):
+        response = self.client.post(
+            "/api/v1/global/route-intelligence",
+            json={
+                "shipment_id": "EXP-104",
+                "scenario_id": "synthetic-suez-capacity-restriction",
+                "weights": {"cost": 20, "delivery_time": 30, "carbon": 35, "resilience": 15},
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertTrue(body["synthetic"])
+        self.assertTrue(body["recovery_feasible"])
+        self.assertIn(body["assignment_route_id"], {route["id"] for route in body["routes"]})
+        self.assertFalse(next(iter(body["analyses"].values()))["uses_llm"])
+        self.assertEqual(body["rankings"]["balanced"][0], body["recommended_route_id"])
+        self.assertEqual(set(body["analyses"]), {route["id"] for route in body["routes"]})
+        for route in body["routes"]:
+            analysis = body["analyses"][route["id"]]
+            self.assertEqual(analysis["delta_vs_baseline"]["baseline_route_id"], body["baseline_route"]["id"])
+            baseline = body["baseline_route"]
+            baseline_cost = baseline["freight_cost"] + max(0, baseline["transit_time"] - 24) * 18
+            route_cost = route["freight_cost"] + max(0, route["transit_time"] - 24) * 18
+            self.assertAlmostEqual(analysis["total_cost"], route_cost)
+            self.assertAlmostEqual(analysis["delta_vs_baseline"]["cost_savings"], baseline_cost - route_cost)
+            self.assertAlmostEqual(analysis["delta_vs_baseline"]["time_savings_days"], baseline["transit_time"] - route["transit_time"])
+            self.assertAlmostEqual(analysis["delta_vs_baseline"]["carbon_savings_kg"], baseline["carbon_kg"] - route["carbon_kg"])
+            self.assertAlmostEqual(
+                sum(analysis["carbon_by_mode_kg"].values()), route["carbon_kg"]
+            )
+            self.assertTrue(analysis["recommendation"])
+            self.assertEqual(analysis["analysis_type"], "deterministic_rule_based")
+        self.assertTrue(any("customs" in assumption.lower() for assumption in body["assumptions"]))
+
     def test_global_optimization_reallocates_capacity_and_persists_history(self):
         response = self.client.post("/api/v1/global/optimizations", json={})
         self.assertEqual(response.status_code, 201, response.text)
@@ -78,6 +112,16 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
         retrieved = self.client.get(f"/api/v1/global/optimizations/{record['id']}")
         self.assertEqual(retrieved.status_code, 200)
         self.assertEqual(retrieved.json(), record)
+        report = self.client.get(f"/api/v1/global/optimizations/{record['id']}/report.csv")
+        self.assertEqual(report.status_code, 200)
+        self.assertIn("text/csv", report.headers["content-type"])
+        self.assertIn("QSupply synthetic route comparison report", report.text)
+        self.assertIn("Carbon estimate (kgCO2e)", report.text)
+        self.assertIn("sea-jebel-rotterdam", report.text)
+        self.assertEqual(
+            self.client.get("/api/v1/global/optimizations/not-a-run/report.csv").status_code,
+            404,
+        )
 
         position_url = (
             f"/api/v1/global/optimizations/{record['id']}"
@@ -106,6 +150,11 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
             "/api/v1/global/optimizations", json={"scenario_id": "not-a-scenario"}
         )
         self.assertEqual(unknown_scenario.status_code, 404)
+        unknown_analysis_scenario = self.client.post(
+            "/api/v1/global/route-intelligence",
+            json={"shipment_id": "EXP-104", "scenario_id": "not-a-scenario"},
+        )
+        self.assertEqual(unknown_analysis_scenario.status_code, 404)
         self.assertEqual(
             self.client.get("/api/v1/global/optimizations/not-a-run").status_code,
             404,

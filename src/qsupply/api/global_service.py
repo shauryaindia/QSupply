@@ -10,11 +10,13 @@ from qsupply.network.global_demo import (
 )
 from qsupply.network.models import DisruptionScenario, TransportMode
 from qsupply.network.planning import (
+    ObjectiveReferences,
     CandidateRoute,
     ObjectiveWeights,
     compare_recovery,
     simulate_movement,
 )
+from qsupply.network.insights import analyze_route_alternatives
 from qsupply.network.routing import (
     RouteLeg,
     generate_candidate_routes,
@@ -29,6 +31,8 @@ from .schemas import (
     NetworkResponse,
     NetworkScenario,
     RouteLegResponse,
+    RouteAnalysisResponse,
+    RouteIntelligenceResponse,
 )
 
 
@@ -151,6 +155,7 @@ def route_response(route: CandidateRoute) -> CandidateRouteResponse:
                 carbon_kg=leg.carbon_kg,
                 capacity=leg.capacity,
                 geometry=list(leg.geometry),
+                resilience_exposure=leg.resilience_exposure,
             )
             for leg in route.legs
         ],
@@ -260,6 +265,73 @@ def run_global_optimization(
     }
 
 
+def route_intelligence(
+    shipment_id: str,
+    scenario_id: str | None,
+    weights: dict[str, int],
+    max_routes: int,
+) -> RouteIntelligenceResponse:
+    profile = get_shipment_profile(shipment_id)
+    if profile is None:
+        raise KeyError(shipment_id)
+    scenario = get_global_scenario(scenario_id)
+    if scenario_id is not None and scenario is None:
+        raise KeyError(scenario_id)
+    comparison = compare_recovery(
+        global_demo_network(),
+        global_demo_shipments(),
+        scenario,
+        ObjectiveWeights(**weights),
+        max_routes=max_routes,
+    )
+    options = (
+        comparison.recovery_candidates[shipment_id]
+        if scenario_id is not None
+        else comparison.baseline_candidates[shipment_id]
+    )
+    if not options:
+        raise ValueError("no feasible candidate routes exist under the selected scenario")
+    baseline_route = comparison.baseline.routes[shipment_id]
+    references = comparison.normalization_references
+    assignment = comparison.recovery if scenario_id is not None else comparison.baseline
+    recommended_id, rankings, analyses = analyze_route_alternatives(
+        profile,
+        options,
+        baseline_route,
+        ObjectiveWeights(**weights),
+        references,
+        scenario_id=scenario_id,
+    )
+    return RouteIntelligenceResponse(
+        shipment_id=shipment_id,
+        scenario_id=scenario_id,
+        recommended_route_id=recommended_id,
+        assignment_route_id=(
+            assignment.routes[shipment_id].id if assignment is not None else None
+        ),
+        baseline_route=route_response(baseline_route),
+        routes=[route_response(route) for route in options],
+        rankings=rankings,
+        analyses={
+            route_id: RouteAnalysisResponse.model_validate(analysis)
+            for route_id, analysis in analyses.items()
+        },
+        recovery_feasible=comparison.recovery_feasible,
+        normalization_references={
+            "cost": references.cost,
+            "delivery_time": references.delivery_time,
+            "carbon": references.carbon,
+            "resilience": references.resilience,
+        },
+        assumptions=[
+            "All route inputs and emissions factors in this demonstration are synthetic.",
+            "Route cost includes synthetic fixed and per-load-unit link costs plus modeled deadline penalties.",
+            "Customs delay, port handling, inventory holding cost, shipment weight, reliability and regulatory impact are not modeled.",
+            "The recommendation is deterministic rule-based analysis; no LLM is used.",
+        ],
+    )
+
+
 def movement_for_result(
     result: dict[str, Any], shipment_id: str, elapsed_time: float
 ) -> dict[str, Any]:
@@ -297,6 +369,7 @@ def _route_from_dict(data: dict[str, Any]) -> CandidateRoute:
             carbon_kg=leg["carbon_kg"],
             capacity=leg["capacity"],
             geometry=tuple(tuple(point) for point in leg["geometry"]),
+            resilience_exposure=leg.get("resilience_exposure", 0.0),
         )
         for leg in data["legs"]
     )

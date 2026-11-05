@@ -2003,3 +2003,355 @@ th:first-child {
     flex-wrap: wrap;
   }
 }
+
+/* QSupply enterprise readability scale */
+:root {
+  font-size: 16px;
+  --muted: #627286;
+}
+body,
+button,
+input,
+select {
+  font-size: 16px;
+}
+.sidebar {
+  padding-top: 27px;
+}
+.workspace-chip strong,
+.sidebar-user strong,
+.api-status strong {
+  font-size: 13px;
+}
+.workspace-chip small,
+.sidebar-user small,
+.api-status small,
+.brand-lockup small,
+.nav-label,
+.breadcrumb,
+.env-chip {
+  font-size: 12px;
+}
+.nav-item {
+  height: 44px;
+  font-size: 14px;
+}
+.content-area {
+  padding: 32px 34px 48px;
+}
+.page-heading {
+  margin-bottom: 25px;
+}
+.page-heading h1 {
+  font-size: 34px;
+  line-height: 1.18;
+  letter-spacing: -0.8px;
+}
+.page-heading p,
+.panel-heading p,
+.banner-info p,
+.synthetic-note,
+.connection-alert p {
+  font-size: 16px;
+  line-height: 1.55;
+}
+.eyebrow,
+.metric-label,
+.panel-meta,
+.status-list small,
+.metric-detail {
+  font-size: 13px;
+}
+.metric-card {
+  min-height: 145px;
+  padding: 20px;
+}
+.metric-value {
+  margin-top: 13px;
+  font-size: 31px;
+  line-height: 1.15;
+}
+.unavailable-metrics .metric-value {
+  color: #263a50;
+  font-size: 24px;
+}
+.panel {
+  padding: 22px;
+  border-radius: 11px;
+}
+.panel-heading {
+  margin-bottom: 18px;
+}
+.panel-heading h2 {
+  font-size: 22px;
+  line-height: 1.25;
+}
+.panel-heading p,
+.panel-meta {
+  color: #627286;
+}
+table th {
+  height: 43px;
+  font-size: 13px;
+}
+table td {
+  height: 49px;
+  font-size: 14px;
+}
+.primary-button,
+.secondary-button,
+.text-button,
+.route-ranking-control select,
+.route-choice select,
+.movement-buttons select {
+  font-size: 14px;
+}
+.primary-button,
+.secondary-button {
+  min-height: 42px;
+}
+.global-map-frame {
+  height: clamp(500px, 65vh, 760px);
+}
+.global-map-frame .leaflet-control-attribution {
+  font-size: 11px;
+}
+.graph-legend,
+.map-mode-filter,
+.network-units,
+.scenario-select,
+.network-footnote,
+.scenario-description,
+.location-inspector,
+.global-run-form label,
+.global-run-form small,
+.route-choice,
+.route-score-note,
+.recovery-status,
+.movement-readout,
+.movement-buttons label {
+  font-size: 13px;
+}
+.weight-total {
+  font-size: 13px;
+}
+.objective-weight-grid label {
+  font-size: 13px;
+}
+.weight-input-wrap {
+  height: 42px;
+}
+.weight-input-wrap input,
+.global-run-form select {
+  font-size: 14px;
+}
+.route-alternative-list {
+  display: grid;
+  gap: 9px;
+  max-height: 420px;
+  overflow: auto;
+}
+.route-alternative {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid #dfe6eb;
+  border-radius: 9px;
+  background: #fff;
+  color: #35475d;
+  text-align: left;
+}
+.route-alternative:hover,
+.route-alternative.selected {
+  border-color: #398f83;
+  background: #f2faf8;
+}
+.route-alternative-top,
+.route-alternative-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.route-alternative-top strong {
+  font-size: 15px;
+}
+.route-alternative-modes {
+  color: #627286;
+  font-size: 13px;
+}
+.route-alternative-metrics span {
+  font-size: 13px;
+  font-weight: 600;
+}
+.route-ranking-control,
+.route-ranking-control select {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  color: #44566b;
+  font-size: 14px;
+}
+.route-ranking-control select {
+  height: 42px;
+  margin-top: 5px;
+  padding: 0 10px;
+  border: 1px solid #d8e0e7;
+  border-radius: 7px;
+  background: white;
+}
+.route-score-note {
+  display: block;
+  margin-top: 10px;
+  color: #627286;
+  line-height: 1.5;
+}
+.scenario-delta-grid,
+.route-delta-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 12px 0;
+}
+.scenario-delta-grid > div,
+.route-delta-strip > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid #e2e9ed;
+  border-radius: 8px;
+  background: #f8fbfb;
+}
+.scenario-delta-grid span,
+.route-delta-strip span,
+.carbon-mode-breakdown span {
+  color: #627286;
+  font-size: 13px;
+}
+.scenario-delta-grid strong,
+.route-delta-strip strong {
+  color: #23374c;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.scenario-delta-grid small,
+.route-delta-strip small {
+  color: #627286;
+  font-size: 12px;
+}
+.route-analysis-card {
+  margin: 13px 0;
+  padding: 16px;
+  border: 1px solid #dce9e6;
+  border-radius: 10px;
+  background: #f6fbfa;
+}
+.analysis-eyebrow {
+  color: #24766c;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+}
+.route-analysis-card h3 {
+  margin: 9px 0 12px;
+  color: #23374c;
+  font-size: 17px;
+  line-height: 1.4;
+}
+.analysis-ranks,
+.carbon-mode-breakdown,
+.route-analysis-card > small {
+  color: #53667a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.carbon-mode-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 15px;
+  padding: 10px 0;
+}
+.analysis-findings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.analysis-findings strong {
+  font-size: 14px;
+}
+.analysis-findings ul {
+  margin: 7px 0 0;
+  padding-left: 19px;
+  color: #53667a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.report-download {
+  margin: 0 0 13px;
+}
+.route-leg-table table {
+  min-width: 720px;
+}
+.mode-tag {
+  font-size: 12px;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 3px solid #1d8c7c;
+  outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  .content-area {
+    padding: 22px 14px 34px;
+  }
+  .page-heading h1 {
+    font-size: 29px;
+  }
+  .panel-heading h2 {
+    font-size: 20px;
+  }
+  .metric-value {
+    font-size: 25px;
+  }
+  .global-map-frame {
+    height: 430px;
+  }
+  .scenario-delta-grid,
+  .route-delta-strip {
+    grid-template-columns: 1fr;
+  }
+  .analysis-findings {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Raise compact labels used throughout both the CVRP and network workspaces. */
+#root small,
+.badge,
+.nav-soon,
+.env-chip,
+.text-button,
+.comparison-strip,
+.comparison-strip strong,
+.comparison-heading strong,
+.comparison-heading small,
+.comparison-formula,
+.comparison-values span,
+.comparison-values strong,
+.route-list-heading strong,
+.route-list-heading span,
+.result-kpis small,
+.result-kpis em,
+.empty-state strong,
+.empty-state p {
+  font-size: 13px;
+}
+.result-kpis strong,
+.comparison-values strong,
+.comparison-heading strong {
+  font-size: 15px;
+}
