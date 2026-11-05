@@ -1485,7 +1485,7 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-lockup">
-          <div className="brand-mark">Q</div>
+          <img className="brand-mark" src="/qsupply-mark.png" alt="QSupply logo" />
           <div>
             <strong>QSupply</strong>
             <small>BY MACROVISION AI</small>

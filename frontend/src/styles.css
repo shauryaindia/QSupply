@@ -66,13 +66,9 @@ button:disabled {
   width: 34px;
   height: 34px;
   border-radius: 11px;
-  background: linear-gradient(145deg, #38a294, #176c64);
-  display: grid;
-  place-items: center;
-  font:
-    800 18px Manrope,
-    sans-serif;
-  color: white;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
   box-shadow: 0 5px 15px #0d171f;
 }
 .brand-lockup strong {

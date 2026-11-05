@@ -114,6 +114,15 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("QSupply dashboard interactions", () => {
+  it("shows the official QSupply logo in the sidebar", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    expect(screen.getByRole("img", { name: "QSupply logo" })).toHaveAttribute(
+      "src",
+      "/qsupply-mark.png",
+    );
+  });
+
   it("shows unverified quantum integrations rather than a fabricated connection", async () => {
     const user = userEvent.setup();
     render(<App />);
