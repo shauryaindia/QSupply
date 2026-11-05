@@ -331,6 +331,41 @@ def validate_candidate_route(
     expected = _route_from_links(shipment, recalculated)
     if expected.transfer_count > max_transfers:
         raise ValueError("route exceeds the maximum transfer count")
+    if route.id != expected.id:
+        raise ValueError("route ID does not match its ordered transport links")
+    if route.location_ids != expected.location_ids:
+        raise ValueError("route locations do not match its ordered transport links")
+    if route.modes != expected.modes:
+        raise ValueError("route modes do not match its ordered transport links")
+    if route.transfer_count != expected.transfer_count:
+        raise ValueError("route transfer count does not match its ordered transport links")
+    if route.bottleneck_capacity != expected.bottleneck_capacity:
+        raise ValueError("route bottleneck capacity does not match its transport links")
+    if len(route.legs) != len(expected.legs):
+        raise ValueError("route leg count does not match its ordered transport links")
+    for leg, expected_leg in zip(route.legs, expected.legs):
+        if (
+            leg.link_id != expected_leg.link_id
+            or leg.origin_id != expected_leg.origin_id
+            or leg.destination_id != expected_leg.destination_id
+            or leg.mode != expected_leg.mode
+            or leg.capacity != expected_leg.capacity
+            or leg.geometry != expected_leg.geometry
+        ):
+            raise ValueError("route leg metadata does not match its transport link")
+        for field in (
+            "distance_km",
+            "transit_time",
+            "freight_cost",
+            "carbon_kg",
+        ):
+            if not isclose(
+                getattr(leg, field),
+                getattr(expected_leg, field),
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            ):
+                raise ValueError(f"route leg {field} does not match independent recalculation")
     for field in (
         "distance_km",
         "transit_time",

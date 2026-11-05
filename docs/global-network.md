@@ -17,6 +17,15 @@ capacity in `load_unit`, availability, a resilience-exposure score and route
 geometry. Shipment quantities are in `load_unit`; link use is the sum of the
 quantities assigned to routes containing that directed link.
 
+The current CVRP-style network contract uses positive integer shipment
+quantities and integer capacities in the explicitly declared base unit. It
+does not imply that physical capacities are whole tonnes, containers, or other
+natural units: callers must select an exact integer quantum before loading
+fractional data. For example, with a base unit of 0.25 tonne, a capacity of
+12.5 tonnes is represented as 50 units and a 7.25-tonne shipment as 29 units.
+Inputs must not be rounded silently. A general QUBO capacity/slack-bit encoding
+is not part of this route-optimization vertical slice.
+
 All scenario data are labelled synthetic. The Suez example applies a capacity
 override and cost multiplier to a directed sea link. It does not model current
 geopolitics, congestion, schedules, live rates, actual cargo or port operations.
@@ -55,7 +64,8 @@ AIS, carrier tracking, live ETA prediction or a real movement feed.
 
 The frontend uses Leaflet with OpenStreetMap's standard tile endpoint and
 displays the required `© OpenStreetMap contributors` attribution. The map
-library is provider-independent. OpenStreetMap's public tile service is
+splits displayed polylines at the antimeridian. The map library is
+provider-independent. OpenStreetMap's public tile service is
 best-effort and has no SLA; production traffic should use a suitable tile
 provider or self-hosted tiles in accordance with the provider's policy.
 

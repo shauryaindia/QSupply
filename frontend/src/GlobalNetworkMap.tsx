@@ -29,6 +29,34 @@ const markerSymbols: Record<string, string> = {
   other: "•",
 };
 
+/** Split geographic polylines at the antimeridian to avoid map-spanning chords. */
+export function splitAtAntimeridian(
+  points: [number, number][],
+): [number, number][][] {
+  if (points.length < 2) return points.length ? [[...points]] : [];
+  const segments: [number, number][][] = [[points[0]]];
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const next = points[index];
+    const longitudeDelta = next[1] - previous[1];
+    if (Math.abs(longitudeDelta) <= 180) {
+      segments[segments.length - 1].push(next);
+      continue;
+    }
+    const crossesEastward = longitudeDelta < -180;
+    const unwrappedLongitude = next[1] + (crossesEastward ? 360 : -360);
+    const boundary = crossesEastward ? 180 : -180;
+    const fraction = (boundary - previous[1]) / (unwrappedLongitude - previous[1]);
+    const crossingLatitude = previous[0] + (next[0] - previous[0]) * fraction;
+    segments[segments.length - 1].push([crossingLatitude, boundary]);
+    segments.push([
+      [crossingLatitude, -boundary],
+      next,
+    ]);
+  }
+  return segments;
+}
+
 function locationIcon(kind: string, selected: boolean): L.DivIcon {
   const symbol = markerSymbols[kind] ?? markerSymbols.other;
   return L.divIcon({
@@ -108,16 +136,18 @@ export default function GlobalNetworkMap({
       if (!modeFilters.has(link.mode)) return;
       const coordinates = link.geometry as [number, number][];
       if (coordinates.length < 2) return;
-      L.polyline(coordinates, {
-        color: disrupted.has(link.id) ? "#d54646" : modeColors[link.mode] ?? "#77899b",
-        opacity: disrupted.has(link.id) ? 0.9 : 0.38,
-        weight: disrupted.has(link.id) ? 3 : 1.5,
-        dashArray: disrupted.has(link.id) ? "8 7" : undefined,
-      })
-        .bindTooltip(
-          `${link.mode.toUpperCase()} · ${link.distance_km?.toLocaleString() ?? "—"} km · ${link.capacity ?? "unbounded"} ${link.capacity_unit}${disrupted.has(link.id) ? " · scenario constrained" : ""}`,
-        )
-        .addTo(group);
+      splitAtAntimeridian(coordinates).forEach((segment) =>
+        L.polyline(segment, {
+          color: disrupted.has(link.id) ? "#d54646" : modeColors[link.mode] ?? "#77899b",
+          opacity: disrupted.has(link.id) ? 0.9 : 0.38,
+          weight: disrupted.has(link.id) ? 3 : 1.5,
+          dashArray: disrupted.has(link.id) ? "8 7" : undefined,
+        })
+          .bindTooltip(
+            `${link.mode.toUpperCase()} · ${link.distance_km?.toLocaleString() ?? "—"} km · ${link.capacity ?? "unbounded"} ${link.capacity_unit}${disrupted.has(link.id) ? " · scenario constrained" : ""}`,
+          )
+          .addTo(group),
+      );
     });
 
     for (const route of routes) {
@@ -125,14 +155,16 @@ export default function GlobalNetworkMap({
       if (!selected && routes.length > 4) continue;
       route.legs.forEach((leg) => {
         if (!modeFilters.has(leg.mode)) return;
-        L.polyline(leg.geometry as [number, number][], {
-          color: selected ? "#0a9b8e" : modeColors[leg.mode] ?? "#77899b",
-          opacity: selected ? 0.96 : 0.42,
-          weight: selected ? 5 : 2.5,
-          dashArray: selected ? undefined : "5 6",
-        })
-          .bindTooltip(`${selected ? "Selected route" : "Alternative route"} · ${leg.mode}`)
-          .addTo(group);
+        splitAtAntimeridian(leg.geometry as [number, number][]).forEach((segment) =>
+          L.polyline(segment, {
+            color: selected ? "#0a9b8e" : modeColors[leg.mode] ?? "#77899b",
+            opacity: selected ? 0.96 : 0.42,
+            weight: selected ? 5 : 2.5,
+            dashArray: selected ? undefined : "5 6",
+          })
+            .bindTooltip(`${selected ? "Selected route" : "Alternative route"} · ${leg.mode}`)
+            .addTo(group),
+        );
       });
     }
 

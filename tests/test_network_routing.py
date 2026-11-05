@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from qsupply.network import (
@@ -59,6 +60,20 @@ class TestMultimodalRouteGeneration(unittest.TestCase):
             self.assertEqual(route.location_ids[-1], profile.request.destination_id)
             self.assertGreater(route.distance_km, 0)
             self.assertEqual(route.geometry[0], (network.locations[profile.request.origin_id].latitude, network.locations[profile.request.origin_id].longitude))
+
+    def test_independent_validation_rejects_tampered_route_and_leg_metadata(self):
+        network = global_demo_network()
+        profile = global_demo_shipments()[0]
+        route = generate_candidate_routes(network, profile.request)[0]
+        with self.assertRaisesRegex(ValueError, "route modes"):
+            validate_candidate_route(network, profile.request, replace(route, modes=()))
+        tampered_leg = replace(route.legs[0], freight_cost=route.legs[0].freight_cost + 1)
+        with self.assertRaisesRegex(ValueError, "route leg freight_cost"):
+            validate_candidate_route(
+                network,
+                profile.request,
+                replace(route, legs=(tampered_leg, *route.legs[1:])),
+            )
 
     def test_scenario_capacity_and_closure_remove_invalid_route_candidates(self):
         network = global_demo_network()
