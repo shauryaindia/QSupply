@@ -21,6 +21,40 @@ variables, and use only 0 or 1. Python booleans are accepted (`False` is 0 and
 variables are 1. From the repository root, run the tests with
 `PYTHONPATH=src python3 -m unittest discover -s tests`.
 
+## Import-export supply-chain QUBO
+
+`ImportExportProblem` describes shipments, candidate transport options,
+deadlines, lane usage and lane capacities. `formulate_import_export_qubo`
+creates one binary selection variable per shipment-option pair and binary
+slack bits per lane. It adds squared penalties for exactly-one selection and
+capacity equalities. The resulting `QUBO` preserves ordered-pair semantics;
+the formulation stores the expansion's constant offset separately and
+`full_energy(assignment)` includes it.
+
+For option (o) of shipment (s), the business coefficient is
+`freight + time_weight * delivery_time + delay_rate * max(0, delivery_time - deadline) + carbon_weight * carbon`.
+The binary variable `x[s,o]` indicates the selected option. The penalties are
+`P * (1 - sum_o x[s,o])**2` and, for each lane, `P * (sum usage[s,o] * x[s,o] + slack - capacity)**2`.
+Slack is represented by binary powers of two. `P` is one above the sum of
+each shipment's maximum option cost, an upper bound on every feasible
+business cost. Since costs are non-negative and lane units are integral, any
+violated one-hot or capacity equality adds at least `P`; if a feasible plan
+exists, no infeasible assignment can minimize full energy. This guarantee
+does not prove the instance is feasible.
+
+`decode` validates a complete binary assignment and requires one selected
+option per shipment. `check_feasibility` independently checks those choices
+and recomputes lane usage from the original problem data. The business-cost
+evaluator is separate from penalty energy. Lane usage and capacity use
+integer-scaled units. The model supports discrete shipment-option selection
+and shared linear capacities; it does not yet model route sequencing,
+continuous quantities, uncertain lead times, inventory balance or disruption
+recourse. This is a formulation demonstration, not an optimization solver.
+Float cost inputs are interpreted as their exact stored IEEE-754 rational
+values during formulation and evaluation.
+Run `PYTHONPATH=src python3 examples/import_export_qubo.py` for a 32-assignment
+exhaustive example.
+
 ## CVRP route data model
 
 `CVRPProblem` represents one depot, customer delivery demands, vehicle-specific

@@ -61,7 +61,7 @@ Our vision is to bridge Operations Research, Artificial Intelligence, and Quantu
 
 ### Quantum Optimization
 
-- QUBO Problem Builder
+- General-purpose QUBO Problem Builder
 - QAOA Workflows
 - Quantum Solver Integrations
 ---
@@ -145,6 +145,17 @@ assignment and reports clear errors for missing, unknown, or non-binary
 assignment values. Boolean assignments (`False`/`True`) are also accepted as
 0/1. See [`src/README.md`](src/README.md) for a usage example and test command.
 QAOA and solver framework integrations remain planned work.
+
+### Implemented functionality: import-export QUBO formulation
+
+The dependency-free import-export module formulates shipment-option choices,
+delay/time/carbon costs, exactly-one selection penalties and shared integer
+lane capacities as a QUBO. The constant offset is retained separately;
+decoding, original-data feasibility checks and business-cost evaluation are
+provided independently of the QUBO penalty energy. A small synthetic example
+uses exhaustive enumeration only to verify the five-bit formulation. This is
+not a general solver. Qiskit, QAOA, Fujitsu QARP/Qulacs, and other solver
+integrations remain unimplemented.
 
 ### Implemented functionality: CVRP route heuristic
 
