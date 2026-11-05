@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { corridorDisplayName, readableUnit, scenarioDisplayName } from "./presentation";
+import {
+  apiLocationLabel,
+  corridorDisplayName,
+  frontendEnvironmentLabel,
+  readableUnit,
+  scenarioDisplayName,
+} from "./presentation";
 import type { GlobalOptimization, NetworkResponse } from "./api/client";
 
 describe("enterprise presentation labels", () => {
@@ -38,5 +44,20 @@ describe("enterprise presentation labels", () => {
     expect(corridorDisplayName(network, "retired-link")).toBe(
       "Unknown corridor (retired-link)",
     );
+  });
+
+  it("identifies frontend deployment and backend API locations separately", () => {
+    expect(frontendEnvironmentLabel("production")).toBe("Production environment");
+    expect(frontendEnvironmentLabel("development")).toBe("Local development");
+    expect(frontendEnvironmentLabel(undefined)).toBe("Environment unavailable");
+    expect(apiLocationLabel("https://qsupply.onrender.com/")).toBe(
+      "Remote API · qsupply.onrender.com",
+    );
+    expect(apiLocationLabel("http://127.0.0.1:8000")).toBe(
+      "Local API · 127.0.0.1",
+    );
+    expect(apiLocationLabel("")).toBe("API location unavailable");
+    expect(apiLocationLabel("not a URL")).toBe("API location unavailable");
+    expect(apiLocationLabel("file:///tmp/backend")).toBe("API location unavailable");
   });
 });

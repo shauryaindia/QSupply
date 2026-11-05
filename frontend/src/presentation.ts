@@ -35,3 +35,27 @@ export function corridorDisplayName(network: NetworkResponse, linkId: string): s
   const destination = network.nodes.find((item) => item.id === link.target)?.label ?? link.target;
   return `${origin} → ${destination} · ${link.mode}`;
 }
+
+export function frontendEnvironmentLabel(environment: string | undefined): string {
+  if (environment === "production") return "Production environment";
+  if (environment === "development") return "Local development";
+  return "Environment unavailable";
+}
+
+export function apiLocationLabel(apiBaseUrl: string): string {
+  if (!apiBaseUrl) return "API location unavailable";
+
+  try {
+    const url = new URL(apiBaseUrl);
+    if (!["http:", "https:"].includes(url.protocol) || !url.host) {
+      return "API location unavailable";
+    }
+    const hostname = url.hostname.toLowerCase();
+    if (["localhost", "127.0.0.1", "::1"].includes(hostname)) {
+      return `Local API · ${hostname}`;
+    }
+    return `Remote API · ${url.host}`;
+  } catch {
+    return "API location unavailable";
+  }
+}

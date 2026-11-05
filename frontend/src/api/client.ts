@@ -48,18 +48,30 @@ type DecisionQuestion = paths["/api/v1/global/optimizations/{run_id}/questions"]
   ? Body
   : never;
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL?.trim();
+export const API_BASE_URL = (
+  configuredApiBase ||
+  (import.meta.env.DEV ? "http://127.0.0.1:8000" : "")
+).replace(/\/+$/, "");
+
+function requireApiBaseUrl(): string {
+  if (!API_BASE_URL) {
+    throw new Error("QSupply API URL is not configured for this build.");
+  }
+  return API_BASE_URL;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const baseUrl = requireApiBaseUrl();
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
   } catch {
     throw new Error(
-      "QSupply API is unreachable. Start the backend on port 8000.",
+      "QSupply API is unreachable. Check the configured backend service.",
     );
   }
   if (!response.ok) {
@@ -77,11 +89,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestBlob(path: string): Promise<Blob> {
+  const baseUrl = requireApiBaseUrl();
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`);
+    response = await fetch(`${baseUrl}${path}`);
   } catch {
-    throw new Error("QSupply API is unreachable. Start the backend on port 8000.");
+    throw new Error("QSupply API is unreachable. Check the configured backend service.");
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;

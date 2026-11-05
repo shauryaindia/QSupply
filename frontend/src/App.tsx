@@ -11,8 +11,15 @@ import {
 import GlobalNetworkMap from "./GlobalNetworkMap";
 import ScenarioBuilder from "./ScenarioBuilder";
 import TradeoffCharts from "./TradeoffCharts";
-import { corridorDisplayName, readableUnit, scenarioDisplayName } from "./presentation";
 import {
+  apiLocationLabel,
+  corridorDisplayName,
+  frontendEnvironmentLabel,
+  readableUnit,
+  scenarioDisplayName,
+} from "./presentation";
+import {
+  API_BASE_URL,
   api,
   distanceChartValue,
   formatDistance,
@@ -205,44 +212,50 @@ function RunTable({
       />
     );
   return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Run</th>
-            <th>Instance</th>
-            <th>Solver</th>
-            <th>Distance</th>
-            <th>Status</th>
-            <th>Started</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map((run) => (
-            <tr
-              key={run.id}
-              onClick={() => onOpen?.(run)}
-              className={onOpen ? "clickable-row" : ""}
-            >
-              <td>
-                <span className="run-id">{run.id.slice(0, 8)}</span>
-              </td>
-              <td>{run.result?.instance_name ?? run.instance_id}</td>
-              <td>{solverNames[run.solver]}</td>
-              <td>
-                {run.result
-                  ? `${formatDistance(run.result.total_distance_exact)} units`
-                  : "—"}
-              </td>
-              <td>
-                <RunStatus status={run.status} />
-              </td>
-              <td>{new Date(run.created_at).toLocaleString()}</td>
+    <>
+      <div className="table-scroll run-history-scroll" role="region" aria-label="Recent CVRP optimization runs" tabIndex={0}>
+        <table className="run-history-table">
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Instance</th>
+              <th>Solver</th>
+              <th>Distance</th>
+              <th>Status</th>
+              <th>Started</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {runs.map((run) => (
+              <tr
+                key={run.id}
+                onClick={() => onOpen?.(run)}
+                className={onOpen ? "clickable-row" : ""}
+              >
+                <td>
+                  <span className="run-id">{run.id.slice(0, 8)}</span>
+                </td>
+                <td>{run.result?.instance_name ?? run.instance_id}</td>
+                <td>{solverNames[run.solver]}</td>
+                <td>
+                  {run.result
+                    ? `${formatDistance(run.result.total_distance_exact)} units`
+                    : "—"}
+                </td>
+                <td>
+                  <RunStatus status={run.status} />
+                </td>
+                <td>{new Date(run.created_at).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="table-scroll-hint">
+        If not all columns are visible, scroll horizontally to view the solver
+        and result details.
+      </p>
+    </>
   );
 }
 
@@ -406,7 +419,7 @@ function Overview({
         </Panel>
         <Panel
           title="Platform status"
-          subtitle="Capabilities reported by the local API"
+          subtitle="Capabilities reported by the configured API"
         >
           <div className="status-list">
             <div>
@@ -449,7 +462,7 @@ function Overview({
         subtitle="Persisted results from the multimodal route assignment engine"
       >
         {globalRuns.length ? (
-          <div className="table-scroll"><table><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Recovery</th><th>Plan cost</th><th>Estimated carbon</th></tr></thead><tbody>
+          <div className="table-scroll"><table className="global-history-table overview-global-history"><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Recovery</th><th>Plan cost</th><th>Estimated carbon</th></tr></thead><tbody>
             {globalRuns.slice(0, 5).map((run) => {
               const plan = run.result?.recovery ?? run.result?.baseline;
               return <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{scenarioDisplayName(run)}</td><td>{run.result ? (run.result.recovery_feasible ? "Feasible" : "Infeasible") : run.status}</td><td>{plan && network ? `${formatNumber(plan.metrics.total_cost, 1)} ${readableUnit(network.cost_unit, "cost")}` : "—"}</td><td>{plan && network ? `${formatNumber(plan.metrics.carbon_kg)} ${readableUnit(network.carbon_unit, "carbon")} est.` : "—"}</td></tr>;
@@ -459,7 +472,7 @@ function Overview({
       </Panel>
       <Panel
         title="Recent optimization runs"
-        subtitle="Persisted local history from the actual CVRP engine"
+        subtitle="Persisted history from the configured QSupply engine"
         action={
           <button
             className="text-button"
@@ -548,7 +561,7 @@ function OptimizationWorkspace({
         <div className="workspace-main">
           <Panel
             title="Configure a CVRP run"
-            subtitle="This submits a real request to the local QSupply solver API."
+            subtitle="This submits a real request to the configured QSupply solver API."
           >
             <form onSubmit={submit} className="run-form">
               <label>
@@ -635,8 +648,8 @@ function OptimizationWorkspace({
                 )}
               </button>
               <div className="form-footnote">
-                <span>◉</span> Your request will run on the local Python engine.
-                Run history is saved to local SQLite.
+                <span>◉</span> Execution target: {apiLocationLabel(API_BASE_URL)}.
+                Run history is saved by the configured run store.
               </div>
             </form>
           </Panel>
@@ -1488,9 +1501,9 @@ function NetworkExplorer({
         onUseScenario={changeScenario}
       />
 
-      <Panel title="Recent global optimization runs" subtitle="Persisted locally through the configured SQLite or PostgreSQL run store">
+      <Panel title="Recent global optimization runs" subtitle="Persisted through the configured SQLite or PostgreSQL run store">
         {history.length ? (
-          <div className="table-scroll"><table><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Status</th><th>Recovery</th><th>Cost</th></tr></thead><tbody>
+          <div className="table-scroll global-history-scroll" role="region" aria-label="Recent global optimization runs" tabIndex={0}><table className="global-history-table network-global-history"><thead><tr><th>Run</th><th>Created</th><th>Scenario</th><th>Status</th><th>Recovery</th><th>Cost</th></tr></thead><tbody>
             {history.map((run) => <tr key={run.id}><td>{run.id.slice(0, 8)}</td><td>{new Date(run.created_at).toLocaleString()}</td><td>{scenarioDisplayName(run)}</td><td><Badge tone={run.status === "completed" ? "good" : "bad"}>{run.status}</Badge></td><td>{run.result ? run.result.recovery_feasible ? "Feasible" : "Infeasible" : "—"}</td><td>{run.result ? `${formatNumber(run.result.recovery?.metrics.total_cost, 1)} ${readableUnit(network.cost_unit, "cost")}` : "—"}</td></tr>)}
           </tbody></table></div>
         ) : <EmptyState title="No global optimization runs" detail="Run the recovery workspace to create the first persisted result." />}
@@ -1533,7 +1546,7 @@ function Benchmarking({
         <MetricCard
           label="Completed measurements"
           value={String(comparable.length)}
-          detail="Actual local solver executions"
+          detail="Actual solver executions"
           icon="▥"
         />
         <MetricCard
@@ -1662,7 +1675,7 @@ function Benchmarking({
       <div className="synthetic-note">
         <span>i</span>
         <div>
-          Execution-time measurements are individual local samples, not
+          Execution-time measurements are individual saved samples, not
           statistically reliable performance claims. Instance definitions and
           seeds are shown in the optimization workspace.
         </div>
@@ -1916,7 +1929,7 @@ export default function App() {
           <span className="workspace-avatar">MV</span>
           <div>
             <strong>MacroVision AI</strong>
-            <small>Local workspace</small>
+            <small>QSupply workspace</small>
           </div>
           <span className="chevron">⌄</span>
         </div>
@@ -1935,7 +1948,7 @@ export default function App() {
                     onClick={() => setPage(item.id)}
                   >
                     <span className="nav-icon">{item.icon}</span>
-                    {item.title}
+                    <span className="nav-text">{item.title}</span>
                     {item.id === "quantum" && (
                       <span className="nav-soon">STATUS</span>
                     )}
@@ -1945,15 +1958,17 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="api-status">
+          <div
+            className="api-status"
+            role="status"
+            aria-label={`${connected ? "API connected" : "API disconnected"}; ${apiLocationLabel(API_BASE_URL)}`}
+          >
             <span className={`api-dot ${connected ? "connected" : ""}`} />
             <div>
               <strong>
                 {connected ? "API connected" : "API disconnected"}
               </strong>
-              <small>
-                {connected ? "Local Python engine" : "Waiting for backend"}
-              </small>
+              <small>{apiLocationLabel(API_BASE_URL)}</small>
             </div>
             <button
               aria-label="Refresh API connection"
@@ -1966,7 +1981,7 @@ export default function App() {
             <div className="user-avatar">S</div>
             <div>
               <strong>Workspace user</strong>
-              <small>Local session</small>
+              <small>Workspace session</small>
             </div>
             <span>···</span>
           </div>
@@ -1980,8 +1995,12 @@ export default function App() {
             <strong>{pageTitles[page].title}</strong>
           </div>
           <div className="topbar-actions">
-            <span className="env-chip">
-              <i /> LOCAL ENVIRONMENT
+            <span
+              className="env-chip"
+              title={`Backend ${apiLocationLabel(API_BASE_URL)}`}
+              aria-label={`Frontend: ${frontendEnvironmentLabel(import.meta.env.VITE_APP_ENV)}; backend: ${apiLocationLabel(API_BASE_URL)}`}
+            >
+              <i /> {frontendEnvironmentLabel(import.meta.env.VITE_APP_ENV)}
             </span>
             <button
               className="icon-button"
@@ -1997,16 +2016,14 @@ export default function App() {
           {loadError && !connected && (
             <div role="alert" className="load-error">
               <strong>Cannot connect to the QSupply API.</strong> {loadError}
-              <span>
-                Start the backend using the command in the repository README.
-              </span>
+              <span>Check the configured API service and try again.</span>
             </div>
           )}
           {loading && !connected ? (
             <div className="loading-page">
               <span className="spinner large" />
               <strong>Connecting to QSupply API</strong>
-              <p>Loading actual capabilities and local run history.</p>
+              <p>Loading actual capabilities and saved run history.</p>
             </div>
           ) : page === "overview" ? (
             <Overview

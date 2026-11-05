@@ -621,8 +621,8 @@ th:first-child {
   font-size: 9px;
   line-height: 1.5;
 }
-.synthetic-note > span,
-.network-footnote > span {
+.synthetic-note > span:first-child,
+.network-footnote > span:first-child {
   flex: none;
   width: 16px;
   height: 16px;
@@ -1442,14 +1442,13 @@ th:first-child {
   .brand-lockup > div:last-child,
   .workspace-chip,
   .nav-label,
-  .nav-item:not(.active) .nav-soon,
-  .nav-item {
-    font-size: 0;
+  .nav-text,
+  .nav-soon {
+    display: none;
   }
   .brand-lockup strong,
   .brand-lockup small,
-  .workspace-chip,
-  .nav-item:not(.active) {
+  .workspace-chip {
     display: none;
   }
   .brand-mark {
@@ -1467,7 +1466,6 @@ th:first-child {
     height: 42px;
     padding: 0;
     margin: 4px 0;
-    font-size: 0;
   }
   .nav-icon {
     font-size: 17px;
@@ -2700,6 +2698,12 @@ a:focus-visible {
   min-width: 0;
 }
 
+.synthetic-note > div {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .panel-heading h2,
 .page-heading h1,
 .metric-detail,
@@ -2789,6 +2793,15 @@ a:focus-visible {
   overscroll-behavior-inline: contain;
 }
 
+.table-scroll:focus-visible {
+  outline: 3px solid #1d8c7c;
+  outline-offset: 2px;
+}
+
+.table-scroll-hint {
+  display: none;
+}
+
 @media (max-width: 960px) and (min-width: 761px) {
   .global-network-side {
     grid-template-columns: minmax(0, 1fr);
@@ -2799,7 +2812,68 @@ a:focus-visible {
   }
 }
 
+@media (max-width: 1120px) {
+  .scenario-comparison-card .scenario-comparison-table {
+    min-width: 700px;
+    table-layout: fixed;
+    white-space: normal;
+  }
+
+  .scenario-comparison-table th,
+  .scenario-comparison-table td {
+    overflow-wrap: anywhere;
+    white-space: normal;
+    vertical-align: top;
+  }
+
+  .scenario-comparison-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #8ca4b4 #edf2f5;
+  }
+
+  .table-scroll-hint {
+    display: block;
+    margin: 7px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+}
+
 @media (max-width: 760px) {
+  .table-scroll .global-history-table,
+  .table-scroll .run-history-table {
+    min-width: 0;
+    table-layout: fixed;
+    white-space: normal;
+  }
+
+  .global-history-table th,
+  .global-history-table td {
+    overflow-wrap: anywhere;
+    white-space: normal;
+    vertical-align: top;
+  }
+
+  .global-history-table th:nth-child(-n + 2),
+  .global-history-table td:nth-child(-n + 2),
+  .run-history-table th:first-child,
+  .run-history-table td:first-child,
+  .run-history-table th:last-child,
+  .run-history-table td:last-child {
+    display: none;
+  }
+
+  .global-history-table th:nth-child(3) { width: 43%; }
+  .global-history-table th:nth-child(4) { width: 20%; }
+  .global-history-table th:nth-child(5) { width: 18%; }
+  .global-history-table th:nth-child(6) { width: 19%; }
+
+  .run-history-table th:nth-child(2) { width: 38%; }
+  .run-history-table th:nth-child(3) { width: 22%; }
+  .run-history-table th:nth-child(4) { width: 20%; }
+  .run-history-table th:nth-child(5) { width: 20%; }
+
   .compact-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2811,5 +2885,42 @@ a:focus-visible {
   .nav-item,
   .nav-item.active {
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 420px) {
+  .metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table-scroll .run-history-table {
+    min-width: 440px;
+  }
+
+  .overview-global-history th:nth-child(4),
+  .overview-global-history td:nth-child(4),
+  .overview-global-history th:nth-child(6),
+  .overview-global-history td:nth-child(6),
+  .network-global-history th:nth-child(4),
+  .network-global-history td:nth-child(4),
+  .network-global-history th:nth-child(5),
+  .network-global-history td:nth-child(5) {
+    display: none;
+  }
+
+  .overview-global-history th:nth-child(3),
+  .network-global-history th:nth-child(3) {
+    width: 64%;
+  }
+
+  .overview-global-history th:nth-child(5),
+  .network-global-history th:nth-child(6) {
+    width: 36%;
+  }
+
+  .env-chip {
+    white-space: nowrap;
+    font-size: 10px;
+    letter-spacing: 0.2px;
   }
 }
