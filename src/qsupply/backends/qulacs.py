@@ -39,7 +39,13 @@ class QulacsUnavailableError(ImportError):
 
 
 class QulacsBackend:
-    """Execute SDK-neutral QAOA gate plans on Qulacs CPU state vectors."""
+    """Translate canonical QAOA rotations and sample Qulacs state vectors.
+
+    Qulacs ``RX``, ``RZ`` and Pauli rotations implement ``exp(+i*theta*P/2)``.
+    QSupply's shared plan uses ``exp(-i*theta*P/2)``, so this adapter negates
+    rotation angles locally. See Qulacs' Python advanced guide for the SDK
+    convention: https://docs.qulacs.org/en/latest/guide/2.0_python_advanced.html
+    """
 
     name = "Qulacs state-vector simulator"
 
@@ -275,10 +281,18 @@ def _append_operation(circuit: Any, operation: Any) -> None:
         circuit.add_H_gate(operation.qubits[0])
     elif operation.gate == "rz":
         assert operation.angle is not None
-        circuit.add_RZ_gate(operation.qubits[0], operation.angle)
+        circuit.add_RZ_gate(operation.qubits[0], -operation.angle)
     elif operation.gate == "rx":
         assert operation.angle is not None
-        circuit.add_RX_gate(operation.qubits[0], operation.angle)
+        circuit.add_RX_gate(operation.qubits[0], -operation.angle)
+    elif operation.gate == "rzz":
+        assert operation.angle is not None
+        control, target = operation.qubits
+        # CNOT-RZ-CNOT realizes RZZ; negate the canonical angle because
+        # Qulacs RZ(theta) = exp(+i*theta*Z/2).
+        circuit.add_CNOT_gate(control, target)
+        circuit.add_RZ_gate(target, -operation.angle)
+        circuit.add_CNOT_gate(control, target)
     elif operation.gate == "cx":
         circuit.add_CNOT_gate(*operation.qubits)
     else:

@@ -51,7 +51,12 @@ class QAOAConfig:
 
 @dataclass(frozen=True)
 class CircuitOperation:
-    """SDK-neutral gate instruction; qubit indices follow variable order."""
+    """Canonical rotation instruction; qubit indices follow variable order.
+
+    ``rz``, ``rzz`` and ``rx`` angles use the mathematical convention
+    ``R_P(theta) = exp(-i * theta * P / 2)``. Backend adapters translate this
+    convention to their SDK's gate definitions.
+    """
 
     gate: str
     qubits: tuple[int, ...]
@@ -118,15 +123,19 @@ SampleFunction = Callable[
 def build_qaoa_circuit_plan(
     ising: IsingModel, gammas: tuple[float, ...], betas: tuple[float, ...]
 ) -> tuple[CircuitOperation, ...]:
-    """Create standard cost-then-mixer QAOA gates, omitting constant phase.
+    """Create canonical QAOA rotations, omitting the Ising constant phase.
 
-    The variable-dependent cost Hamiltonian is divided by its maximum
-    absolute coefficient (a positive constant, preserving its minimizer),
-    then evolved as ``exp(-i * gamma * H_cost_scaled)``. Qulacs ``R_axis``
-    gates use ``exp(+i*theta*axis/2)``, so emitted ``RZ`` and ``RX`` angles
-    are negative twice the QAOA parameters times scaled Hamiltonian
-    coefficients. For a ``ZZ`` term, ``CNOT-RZ-CNOT`` implements its phase. The
-    constant Ising offset is omitted since it contributes only a global phase.
+    For the variable-dependent Hamiltonian
+    ``H_C = sum(h_i Z_i) + sum(J_ij Z_i Z_j)``, the cost is scaled by its
+    maximum absolute coefficient ``s`` (a positive scale preserving its
+    minimizer). This plan therefore represents
+    ``exp(-i * gamma * H_C / s)`` with canonical rotations
+    ``RZ(2*gamma*h_i/s)``, ``RZZ(2*gamma*J_ij/s)`` and ``RX(2*beta)``.
+    ``R_P(theta)`` means ``exp(-i*theta*P/2)`` for every SDK-independent
+    operation. Backend adapters translate that convention to native gates.
+
+    The Ising constant is excluded from circuit evolution because it adds only
+    a global phase. It remains part of reported Ising/full energy.
     """
     if not isinstance(ising, IsingModel):
         raise TypeError("ising must be an IsingModel")
@@ -145,24 +154,26 @@ def build_qaoa_circuit_plan(
         CircuitOperation("h", (index,)) for index in range(len(ising.variables))
     ]
     indices = ising.variable_indices
-    for gamma, beta in zip(gammas, betas):
-        for variable, coefficient in ising.linear.items():
-            angle = float(-2 * gamma * _scaled(coefficient, scale))
+    for gamma, beta in zip(gammas, betas, strict=True):
+        for variable in ising.variables:
+            coefficient = ising.linear[variable]
+            angle = float(2 * gamma * _scaled(coefficient, scale))
             if angle:
                 instructions.append(CircuitOperation("rz", (indices[variable],), angle))
-        for (left, right), coefficient in ising.quadratic.items():
-            angle = float(-2 * gamma * _scaled(coefficient, scale))
-            if angle:
-                control, target = indices[left], indices[right]
-                instructions.extend(
-                    (
-                        CircuitOperation("cx", (control, target)),
-                        CircuitOperation("rz", (target,), angle),
-                        CircuitOperation("cx", (control, target)),
+        for left_index, left in enumerate(ising.variables):
+            for right in ising.variables[left_index + 1 :]:
+                coefficient = ising.quadratic.get((left, right), 0)
+                if not coefficient:
+                    continue
+                angle = float(2 * gamma * _scaled(coefficient, scale))
+                if angle:
+                    instructions.append(
+                        CircuitOperation(
+                            "rzz", (indices[left], indices[right]), angle
+                        )
                     )
-                )
         for index in range(len(ising.variables)):
-            instructions.append(CircuitOperation("rx", (index,), float(-2 * beta)))
+            instructions.append(CircuitOperation("rx", (index,), float(2 * beta)))
     return tuple(instructions)
 
 

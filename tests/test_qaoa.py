@@ -1,5 +1,3 @@
-import cmath
-import math
 import unittest
 from fractions import Fraction
 from random import Random
@@ -42,8 +40,8 @@ class TestQAOAConfigurationAndPlan(unittest.TestCase):
         ising = IsingModel(
             ("late", "first"),
             100,
-            {"late": 2, "first": 0},
-            {("late", "first"): 3},
+            {"first": Fraction(-1, 4), "late": Fraction(1, 2)},
+            {("late", "first"): 1},
         )
         plan = build_qaoa_circuit_plan(ising, (0.25,), (0.1,))
         self.assertEqual(
@@ -51,15 +49,79 @@ class TestQAOAConfigurationAndPlan(unittest.TestCase):
             [
                 ("h", (0,), None),
                 ("h", (1,), None),
-                ("rz", (0,), -1 / 3),
-                ("cx", (0, 1), None),
-                ("rz", (1,), -0.5),
-                ("cx", (0, 1), None),
-                ("rx", (0,), -0.2),
-                ("rx", (1,), -0.2),
+                ("rz", (0,), 0.25),
+                ("rz", (1,), -0.125),
+                ("rzz", (0, 1), 0.5),
+                ("rx", (0,), 0.2),
+                ("rx", (1,), 0.2),
             ],
         )
-        self.assertNotIn(100, [item.angle for item in plan])
+        no_offset = IsingModel(
+            ising.variables, -1000, ising.linear, ising.quadratic
+        )
+        self.assertEqual(plan, build_qaoa_circuit_plan(no_offset, (0.25,), (0.1,)))
+        self.assertEqual(ising.variable_indices, {"late": 0, "first": 1})
+
+    def test_scaled_hamiltonian_rotations_keep_the_canonical_sign(self):
+        ising = IsingModel(
+            ("a", "b"),
+            0,
+            {"a": 4, "b": -2},
+            {("a", "b"): 1},
+        )
+        plan = build_qaoa_circuit_plan(ising, (0.5,), (0.25,))
+        rotations = [(item.gate, item.qubits, item.angle) for item in plan if item.angle is not None]
+        self.assertEqual(
+            rotations,
+            [
+                ("rz", (0,), 1.0),
+                ("rz", (1,), -0.5),
+                ("rzz", (0, 1), 0.25),
+                ("rx", (0,), 0.5),
+                ("rx", (1,), 0.5),
+            ],
+        )
+
+    def test_qulacs_translation_negates_only_canonical_rotations(self):
+        from qsupply.backends.qulacs import _append_operation
+
+        class RecordingCircuit:
+            def __init__(self):
+                self.operations = []
+
+            def add_H_gate(self, qubit):
+                self.operations.append(("h", qubit))
+
+            def add_RZ_gate(self, qubit, angle):
+                self.operations.append(("rz", qubit, angle))
+
+            def add_RX_gate(self, qubit, angle):
+                self.operations.append(("rx", qubit, angle))
+
+            def add_CNOT_gate(self, control, target):
+                self.operations.append(("cx", control, target))
+
+        circuit = RecordingCircuit()
+        operations = build_qaoa_circuit_plan(
+            IsingModel(("a", "b"), 0, {"a": 1, "b": 0}, {("a", "b"): 1}),
+            (0.3,),
+            (0.2,),
+        )
+        for operation in operations:
+            _append_operation(circuit, operation)
+        self.assertEqual(
+            circuit.operations,
+            [
+                ("h", 0),
+                ("h", 1),
+                ("rz", 0, -0.6),
+                ("cx", 0, 1),
+                ("rz", 1, -0.6),
+                ("cx", 0, 1),
+                ("rx", 0, -0.4),
+                ("rx", 1, -0.4),
+            ],
+        )
 
     def test_qulacs_integer_sample_bit_order_is_little_endian(self):
         self.assertEqual(
@@ -120,32 +182,69 @@ class TestQulacsIntegration(unittest.TestCase):
         self.assertIsNone(result.best_binary_assignment)
 
     @unittest.skipUnless(QulacsBackend.is_available(), "optional Qulacs package not installed")
-    def test_actual_qaoa_cost_circuit_matches_diagonal_hamiltonian(self):
+    def test_complete_qulacs_unitary_matches_canonical_qaoa_and_offset_phase(self):
+        import numpy as np
+
         qulacs = __import__("qulacs")
         ising = IsingModel(
-            ("x0", "x1"),
+            ("x1", "x0"),
             Fraction(7, 3),
-            {"x0": Fraction(2, 3), "x1": Fraction(-1, 2)},
-            {("x0", "x1"): Fraction(5, 4)},
+            {"x0": Fraction(-1, 2), "x1": Fraction(2, 3)},
+            {("x1", "x0"): Fraction(5, 4)},
         )
         gamma = 0.37
-        plan = build_qaoa_circuit_plan(ising, (gamma,), (0.0,))
+        beta = 0.23
+        plan = build_qaoa_circuit_plan(ising, (gamma,), (beta,))
         circuit = qulacs.QuantumCircuit(2)
         from qsupply.backends.qulacs import _append_operation
 
         for operation in plan:
             _append_operation(circuit, operation)
-        state = qulacs.QuantumState(2)
-        circuit.update_quantum_state(state)
-        vector = state.get_vector()
+        actual = np.zeros((4, 4), dtype=complex)
+        for column in range(4):
+            state = qulacs.QuantumState(2)
+            state.set_computational_basis(column)
+            circuit.update_quantum_state(state)
+            actual[:, column] = state.get_vector()
+
+        scale = Fraction(5, 4)
+        hadamard = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+        h_initial = np.kron(hadamard, hadamard)
+        cost_diagonal = []
         for raw in range(4):
-            bits = tuple((raw >> index) & 1 for index in range(2))
-            spins = {f"x{index}": 1 - 2 * bits[index] for index in range(2)}
+            spins = {
+                variable: 1 - 2 * ((raw >> index) & 1)
+                for index, variable in enumerate(ising.variables)
+            }
             variable_energy = ising.energy(spins) - ising.constant
-            expected = cmath.exp(
-                -1j * gamma * float(variable_energy / Fraction(5, 4))
-            ) / 2
-            self.assertTrue(math.isclose(abs(vector[raw] - expected), 0, abs_tol=1e-10))
+            cost_diagonal.append(
+                np.exp(-1j * gamma * float(variable_energy / scale))
+            )
+        cost = np.diag(cost_diagonal)
+        mixer_single = np.cos(beta) * np.eye(2) - 1j * np.sin(beta) * np.array(
+            [[0, 1], [1, 0]], dtype=complex
+        )
+        mixer = np.kron(mixer_single, mixer_single)
+        canonical_without_offset = mixer @ cost @ h_initial
+        np.testing.assert_allclose(actual, canonical_without_offset, atol=1e-12)
+
+        # Including the Ising constant multiplies the complete unitary by one
+        # scalar phase; it cannot change measurement probabilities.
+        full_cost_diagonal = [
+            np.exp(-1j * gamma * float(ising.energy({
+                variable: 1 - 2 * ((raw >> index) & 1)
+                for index, variable in enumerate(ising.variables)
+            }) / scale))
+            for raw in range(4)
+        ]
+        canonical_with_offset = mixer @ np.diag(full_cost_diagonal) @ h_initial
+        global_phase = np.exp(-1j * gamma * float(ising.constant / scale))
+        np.testing.assert_allclose(
+            canonical_with_offset, global_phase * canonical_without_offset, atol=1e-12
+        )
+        np.testing.assert_allclose(
+            canonical_with_offset, global_phase * actual, atol=1e-12
+        )
 
     @unittest.skipUnless(QulacsBackend.is_available(), "optional Qulacs package not installed")
     def test_seeded_qaoa_result_and_import_export_validation(self):
@@ -192,8 +291,12 @@ class TestQulacsIntegration(unittest.TestCase):
         self.assertEqual(result.solver_id, "qulacs-qaoa")
         self.assertEqual(result.backend_version, QulacsBackend.version())
         self.assertEqual(result.full_energy, result.ising_energy)
+        self.assertEqual(result.qubo_energy, -43)
+        self.assertEqual(formulation.offset, 60)
+        self.assertEqual(result.full_energy, formulation.offset + result.qubo_energy)
+        self.assertEqual(result.full_energy, 17)
         self.assertEqual(exact.full_energy, 17)
-        self.assertGreaterEqual(result.full_energy, exact.full_energy)
+        self.assertEqual(result.full_energy, exact.full_energy)
         feasible_samples = sum(
             count
             for bits, count in result.sample_frequencies.items()
@@ -206,10 +309,9 @@ class TestQulacsIntegration(unittest.TestCase):
             result.feasible_sample_rate,
             feasible_samples / sum(result.sample_frequencies.values()),
         )
-        self.assertIsInstance(result.feasible, bool)
-        if result.feasible:
-            self.assertIsNotNone(result.decoded_solution)
-            self.assertIsNotNone(result.business_objective)
+        self.assertIs(result.feasible, True)
+        self.assertEqual(dict(result.decoded_solution), {"S1": "B", "S2": "A"})
+        self.assertEqual(result.business_objective, 17)
         self.assertGreaterEqual(result.sample_count, result.best_sample_frequency)
         self.assertIsNotNone(result.average_sampled_energy)
 

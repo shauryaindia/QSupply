@@ -147,14 +147,18 @@ indices. Qulacs integer samples use bit `i` for qubit `i`, and the adapter
 decodes them in that same order.
 
 For each layer, QAOA prepares `|+>` states, evolves the variable-dependent
-Ising cost Hamiltonian, then applies the transverse-field X mixer. Qulacs
-rotation signs implement the standard `exp(-i γ H_cost)` and
-`exp(-i β ΣX)` evolution. The Ising constant is omitted from circuit gates
-because it contributes only a global phase, then restored by independent
-QUBO/full-energy evaluation. The variable-dependent cost is divided by its
-maximum absolute coefficient (a positive scale); reported energies remain in
-the original units. Gate angles are floating-point values, while discrete
-sample energies are recalculated using exact model arithmetic where supported.
+Ising cost Hamiltonian, then applies the transverse-field X mixer. The shared
+circuit plan uses the canonical mathematical convention
+`R_P(θ) = exp(-i θ P / 2)`: `RZ(2 γ h_i/s)`, `RZZ(2 γ J_ij/s)` and
+`RX(2 β)`, where `s` is the positive maximum-absolute-coefficient cost scale.
+Backend adapters translate these canonical rotations into SDK-native gates;
+they must not redefine the QAOA equations. Qulacs `RX` and `RZ` use
+`exp(+i θ P / 2)`, so the Qulacs adapter negates their angles locally and
+decomposes `RZZ` as CNOT–RZ–CNOT. The Ising constant is omitted from circuit
+gates because it contributes only a global phase, then restored by independent
+QUBO/full-energy evaluation. Reported energies remain in the original units.
+Gate angles are floating-point values, while discrete sample energies are
+recalculated using exact model arithmetic where supported.
 
 The bounded implementation supports up to 12 variables, depth 1–3, 16–2,048
 shots per evaluation and 1–25 optimizer updates. Seeded SPSA and coordinate
