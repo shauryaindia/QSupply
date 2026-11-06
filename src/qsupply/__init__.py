@@ -1,6 +1,7 @@
 """Core optimization models for QSupply."""
 
 from .qubo import QUBO
+from .ising import IsingModel, qubo_to_ising
 from .import_export import (
     FeasibilityReport,
     ImportExportEvaluation,
@@ -31,6 +32,8 @@ from .benchmarking import (
 
 __all__ = [
     "QUBO",
+    "IsingModel",
+    "qubo_to_ising",
     "TransportOption",
     "Shipment",
     "ImportExportProblem",

@@ -161,6 +161,17 @@ uses exhaustive enumeration only to verify the five-bit formulation. This is
 not a general solver. Qiskit, QAOA, Fujitsu QARP/Qulacs, and other solver
 integrations remain unimplemented.
 
+### Implemented functionality: QUBO-to-Ising conversion
+
+`qubo_to_ising` converts the named QUBO model to `C + Σ h[i] z[i] + Σ
+J[i,j] z[i] z[j]`, using `z[i] = 1 - 2*x[i]` (bit 0 is spin +1; bit 1 is
+spin -1). It combines the QUBO's supplied ordered-pair coefficients for each
+unordered pair, preserves declared variable/register order, and accepts a
+separate constant offset. Integer and rational coefficients are converted
+with exact rational factors. This conversion does not provide a circuit,
+quantum backend, or QUBO solver; QAOA and framework integrations remain
+planned work. See [`src/README.md`](src/README.md#qubo-to-ising-conversion).
+
 ### Implemented functionality: CVRP route heuristic
 
 The `CVRPProblem` model represents a single depot, customer demands, vehicle

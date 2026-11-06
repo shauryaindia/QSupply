@@ -55,6 +55,34 @@ values during formulation and evaluation.
 Run `PYTHONPATH=src python3 examples/import_export_qubo.py` for a 32-assignment
 exhaustive example.
 
+## QUBO to Ising conversion
+
+`qubo_to_ising(qubo, offset=...)` converts the existing ordered-pair QUBO to
+the canonical Ising energy `C + sum(h[i] * z[i]) + sum(J[i,j] * z[i] * z[j])`.
+It uses `z[i] = 1 - 2*x[i]`: binary 0 maps to spin +1 and binary 1 to spin
+-1. The QUBO diagonal becomes linear; for each unordered pair in declared
+variable order, the converter combines both supplied orientations as
+`Q[i,j] + Q[j,i]`. It does not mutate the QUBO.
+
+The `IsingModel` retains the QUBO variable order and exposes a read-only
+`variable_indices` mapping from variable name to register index. Its
+`energy(spins)` method accepts complete ±1 spin assignments, and
+`energy_from_binary(bits)` evaluates the same energy from complete 0/1 bits.
+Integer and rational coefficients use exact rational factors during
+conversion. For import-export formulations, preserve the separately stored
+constant by passing it explicitly:
+
+```python
+from qsupply import formulate_import_export_qubo, qubo_to_ising
+
+formulation = formulate_import_export_qubo(problem)
+ising = qubo_to_ising(formulation.qubo, offset=formulation.offset)
+# ising.energy_from_binary(bits) == formulation.full_energy(bits)
+```
+
+This is a mathematical representation only; it does not build a quantum
+circuit or connect to a solver backend.
+
 ## CVRP route data model
 
 `CVRPProblem` represents one depot, customer delivery demands, vehicle-specific
