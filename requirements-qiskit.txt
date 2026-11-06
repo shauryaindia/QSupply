@@ -1,0 +1,2 @@
+# Optional local QAOA simulator based on Qiskit SDK 2.x.
+qiskit>=2.6.2,<2.7

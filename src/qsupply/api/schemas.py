@@ -83,6 +83,7 @@ class QuantumQAOARequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     example: Literal["synthetic-import-export"] = "synthetic-import-export"
+    backend: Literal["qulacs", "qiskit"] = "qulacs"
     depth: StrictInt = Field(default=1, ge=1, le=3)
     optimizer: Literal["spsa", "coordinate"] = "spsa"
     max_iterations: StrictInt = Field(default=5, ge=1, le=25)
@@ -100,6 +101,7 @@ class QuantumQAOAResponse(BaseModel):
     run_id: str
     status: str
     backend_name: str
+    backend_id: Literal["qulacs", "qiskit"]
     backend_version: str | None
     algorithm_name: str
     algorithm_version: str

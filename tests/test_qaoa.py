@@ -287,7 +287,7 @@ class TestQulacsIntegration(unittest.TestCase):
         self.assertEqual(result.sample_frequencies, repeated.sample_frequencies)
         self.assertEqual(result.sample_count, 512)
         self.assertEqual(result.optimizer_iterations, 2)
-        self.assertEqual(result.circuit_depth, 1)
+        self.assertGreater(result.circuit_depth, config.depth)
         self.assertEqual(result.solver_id, "qulacs-qaoa")
         self.assertEqual(result.backend_version, QulacsBackend.version())
         self.assertEqual(result.full_energy, result.ising_energy)

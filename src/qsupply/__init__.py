@@ -49,6 +49,7 @@ from .benchmarking import (
     generate_synthetic_cvrp,
     synthetic_benchmark_suite,
 )
+from .quantum_benchmark import QuantumBenchmarkRecord, benchmark_qaoa_backends
 
 __all__ = [
     "QUBO",
@@ -92,4 +93,6 @@ __all__ = [
     "benchmark_suite",
     "generate_synthetic_cvrp",
     "synthetic_benchmark_suite",
+    "QuantumBenchmarkRecord",
+    "benchmark_qaoa_backends",
 ]

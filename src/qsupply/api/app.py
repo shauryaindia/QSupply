@@ -20,6 +20,7 @@ from qsupply import (
     synthetic_import_export_problem,
 )
 from qsupply.backends.qulacs import QulacsQAOASolver, QulacsBackend
+from qsupply.backends.qiskit import QiskitBackend, QiskitQAOASolver
 from qsupply.network.global_demo import (
     global_demo_disruptions,
     global_demo_network,
@@ -139,7 +140,15 @@ def create_app(
                 CapabilityStatus(id="milp", status="unavailable", description="No MILP adapter is implemented."),
             ],
             integrations=[
-                CapabilityStatus(id="qiskit-qaoa", status="not_implemented", description="No Qiskit adapter is implemented; QAOA is available through the optional Qulacs simulator."),
+                CapabilityStatus(
+                    id="qiskit-qaoa",
+                    status="available" if QiskitBackend.is_available() else "optional_dependency_missing",
+                    description=(
+                        f"QAOA executes locally through Qiskit {QiskitBackend.version()} StatevectorSampler."
+                        if QiskitBackend.is_available()
+                        else "Install requirements-qiskit.txt to enable Qiskit StatevectorSampler execution."
+                    ),
+                ),
                 CapabilityStatus(
                     id="qulacs-qaoa",
                     status="available" if QulacsBackend.is_available() else "optional_dependency_missing",
@@ -161,10 +170,17 @@ def create_app(
         tags=["quantum"],
     )
     def run_quantum_qaoa(request: QuantumQAOARequest) -> QuantumQAOAResponse:
-        if not QulacsBackend.is_available():
+        backend_available = (
+            QulacsBackend.is_available()
+            if request.backend == "qulacs"
+            else QiskitBackend.is_available()
+        )
+        if not backend_available:
+            backend_label = "Qulacs" if request.backend == "qulacs" else "Qiskit SDK 2.x"
+            dependency_file = "requirements-quantum.txt" if request.backend == "qulacs" else "requirements-qiskit.txt"
             raise HTTPException(
                 status_code=503,
-                detail="Qulacs is an optional dependency and is not installed on this API service.",
+                detail=f"{backend_label} is an optional dependency and is not installed on this API service; install {dependency_file}.",
             )
         problem = synthetic_import_export_problem()
         formulation = formulate_import_export_qubo(problem)
@@ -187,7 +203,12 @@ def create_app(
             random_seed=request.random_seed,
             configuration={"example": request.example},
         )
-        result = QulacsQAOASolver(config).solve(solver_request)
+        solver = (
+            QulacsQAOASolver(config)
+            if request.backend == "qulacs"
+            else QiskitQAOASolver(config)
+        )
+        result = solver.solve(solver_request)
 
         exact_energy = None
         exact_elapsed = None
@@ -215,7 +236,13 @@ def create_app(
         return QuantumQAOAResponse(
             run_id=result.run_id,
             status=result.status.value,
-            backend_name=result.backend_name or "Qulacs state-vector simulator",
+            backend_name=result.backend_name
+            or (
+                "Qulacs state-vector simulator"
+                if request.backend == "qulacs"
+                else "Qiskit StatevectorSampler local simulator"
+            ),
+            backend_id=request.backend,
             backend_version=result.backend_version,
             algorithm_name=result.algorithm_name or "QAOA",
             algorithm_version=result.algorithm_version or "unknown",

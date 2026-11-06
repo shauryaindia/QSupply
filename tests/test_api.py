@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from qsupply import ExactCVRPSolver, NearestNeighborTwoOptSolver, generate_synthetic_cvrp
 from qsupply.backends.qulacs import QulacsBackend
+from qsupply.backends.qiskit import QiskitBackend
 from qsupply.api.app import create_app
 
 
@@ -43,7 +44,10 @@ class TestQSupplyAPI(unittest.TestCase):
         integrations = {
             feature["id"]: feature["status"] for feature in capabilities["integrations"]
         }
-        self.assertEqual(integrations["qiskit-qaoa"], "not_implemented")
+        self.assertEqual(
+            integrations["qiskit-qaoa"],
+            "available" if QiskitBackend.is_available() else "optional_dependency_missing",
+        )
         self.assertEqual(
             integrations["qulacs-qaoa"],
             "available" if QulacsBackend.is_available() else "optional_dependency_missing",

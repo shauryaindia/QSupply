@@ -100,6 +100,15 @@ class QulacsBackend:
         elapsed = perf_counter() - started
         return SampleBatch(counts=counts, execution_time_seconds=elapsed)
 
+    def circuit_depth(self, ising: IsingModel, depth: int) -> int:
+        """Return Qulacs native gate depth for this QSupply QAOA configuration."""
+        qulacs = _load_qulacs()
+        circuit = qulacs.QuantumCircuit(len(ising.variables))
+        angles = (1.0,) * depth
+        for operation in build_qaoa_circuit_plan(ising, angles, angles):
+            _append_operation(circuit, operation)
+        return circuit.calculate_depth()
+
 
 class QulacsQAOASolver:
     """Common solver adapter that runs QAOA circuits using Qulacs sampling."""
@@ -221,7 +230,7 @@ class QulacsQAOASolver:
                 average_sampled_energy=execution.average_sampled_energy,
                 feasible_sample_rate=feasible_sample_rate,
                 optimizer_iterations=execution.optimizer_iterations,
-                circuit_depth=config.depth,
+                circuit_depth=self.backend.circuit_depth(ising, config.depth),
                 optimization_time_seconds=execution.optimization_time_seconds,
                 circuit_execution_time_seconds=execution.circuit_execution_time_seconds,
             )
@@ -272,7 +281,7 @@ class QulacsQAOASolver:
             backend_version=self.backend.version(),
             algorithm_name="Quantum Approximate Optimization Algorithm",
             algorithm_version=QAOA_ALGORITHM_VERSION,
-            circuit_depth=config.depth,
+            circuit_depth=None,
         )
 
 

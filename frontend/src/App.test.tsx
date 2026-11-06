@@ -87,8 +87,8 @@ beforeEach(() => {
     integrations: [
       {
         id: "qiskit-qaoa",
-        status: "not_implemented",
-        description: "No Qiskit adapter is implemented.",
+        status: "optional_dependency_missing",
+        description: "Install requirements-qiskit.txt to enable Qiskit StatevectorSampler execution.",
       },
       {
         id: "qulacs-qaoa",
@@ -214,7 +214,7 @@ describe("QSupply dashboard interactions", () => {
     await screen.findByRole("heading", { name: "Control tower", level: 1 });
     await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
     expect(
-      await screen.findByText("Quantum execution is unavailable"),
+      await screen.findByText("Qulacs execution is unavailable"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run QAOA experiment" })).toBeDisabled();
     expect(screen.getByText("Not configured or verified")).toBeInTheDocument();
@@ -227,8 +227,8 @@ describe("QSupply dashboard interactions", () => {
       solvers: [],
       features: [],
       integrations: [
-        { id: "qiskit-qaoa", status: "not_implemented", description: "No Qiskit adapter." },
-        { id: "qulacs-qaoa", status: "available", description: "QAOA on Qulacs 0.6.14." },
+        { id: "qiskit-qaoa", status: "available", description: "QAOA on Qiskit 2.6.2 StatevectorSampler." },
+        { id: "qulacs-qaoa", status: "optional_dependency_missing", description: "Install requirements-quantum.txt." },
         { id: "fujitsu-qarp", status: "not_configured_or_verified", description: "No QARP adapter." },
       ],
       exact_cvrp_customer_limit: 10,
@@ -236,8 +236,9 @@ describe("QSupply dashboard interactions", () => {
     const quantumResult: QuantumQAOAResult = {
       run_id: "qaoa-test-run",
       status: "completed",
-      backend_name: "Qulacs state-vector simulator",
-      backend_version: "0.6.14",
+      backend_name: "Qiskit StatevectorSampler (local state-vector simulator)",
+      backend_id: "qiskit",
+      backend_version: "2.6.2",
       algorithm_name: "Quantum Approximate Optimization Algorithm",
       algorithm_version: "1.0",
       example: "synthetic-import-export",
@@ -276,10 +277,12 @@ describe("QSupply dashboard interactions", () => {
     render(<App />);
     await screen.findByRole("heading", { name: "Control tower", level: 1 });
     await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
+    await user.selectOptions(screen.getByRole("combobox", { name: /Simulator backend/ }), "qiskit");
     await user.click(await screen.findByRole("button", { name: "Run QAOA experiment" }));
 
     expect(api.runQuantumQAOA).toHaveBeenCalledWith({
       example: "synthetic-import-export",
+      backend: "qiskit",
       depth: 1,
       optimizer: "spsa",
       max_iterations: 5,

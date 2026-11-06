@@ -130,8 +130,9 @@ Rather than assuming a particular optimization paradigm is superior, QSupply aim
 🚧 QSupply is an early local prototype. It includes tested Python optimization
 models, CVRP heuristic and exact solvers, benchmarking, an optional API, and a
 browser dashboard. A bounded synthetic multimodal route and disruption-recovery
-demonstration is implemented; production data integrations and Qiskit or Fujitsu
-quantum services are not.
+demonstration is implemented. Qiskit is available as an optional local
+StatevectorSampler adapter; production data integrations and Fujitsu QARP
+execution are not implemented or verified.
 
 Current focus:
 - System architecture and core optimization framework
@@ -159,8 +160,8 @@ decoding, original-data feasibility checks and business-cost evaluation are
 provided independently of the QUBO penalty energy. A small synthetic example
 uses exhaustive enumeration only to verify the five-bit formulation. This is
 not a general solver. The optional Qulacs QAOA workflow below currently runs a
-separate synthetic QUBO example; Qiskit and Fujitsu QARP integrations remain
-unimplemented.
+separate synthetic QUBO example. Optional Qiskit support is available through
+the local StatevectorSampler adapter; Fujitsu QARP remains unimplemented.
 
 ### Implemented functionality: QUBO-to-Ising conversion
 
@@ -194,9 +195,11 @@ workflow uses only a labelled five-variable synthetic import-export QUBO.
 Every selected bitstring is rescored against the original QUBO and full offset;
 domain feasibility is reported only after the independent validator runs.
 This is local classical state-vector simulation, not execution on quantum
-hardware, a performance claim, or evidence of quantum advantage. Qiskit and
-Fujitsu QARP remain unavailable. Install `requirements-quantum.txt` to enable
-the optional adapter. See [`src/README.md`](src/README.md#optional-qulacs-qaoa).
+hardware, a performance claim, or evidence of quantum advantage. Qiskit is now
+available as a separate optional local StatevectorSampler adapter. Fujitsu
+QARP remains unimplemented and unverified. Install either
+`requirements-quantum.txt` or `requirements-qiskit.txt` to enable its matching
+adapter. See [`src/README.md`](src/README.md#optional-qaoa-backends).
 
 ### Implemented functionality: CVRP route heuristic
 

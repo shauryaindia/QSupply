@@ -54,7 +54,10 @@ def main() -> None:
     )
 
     print(f"Backend: {result.backend_name} {result.backend_version}")
-    print(f"Algorithm: {result.algorithm_name}, p={result.circuit_depth}")
+    print(
+        f"Algorithm: {result.algorithm_name}, p={result.configuration['depth']}, "
+        f"native circuit depth={result.circuit_depth}"
+    )
     print(f"Variables: {len(result.variable_order)} ({', '.join(result.variable_order)})")
     print(f"Seed: {result.random_seed}; total measurements: {result.sample_count}")
     print(f"QAOA best full energy: {result.full_energy}")

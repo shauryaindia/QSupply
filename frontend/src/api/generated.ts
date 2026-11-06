@@ -847,6 +847,12 @@ export interface components {
              */
             example: "synthetic-import-export";
             /**
+             * Backend
+             * @default qulacs
+             * @enum {string}
+             */
+            backend: "qulacs" | "qiskit";
+            /**
              * Depth
              * @default 1
              */
@@ -886,6 +892,11 @@ export interface components {
             status: string;
             /** Backend Name */
             backend_name: string;
+            /**
+             * Backend Id
+             * @enum {string}
+             */
+            backend_id: "qulacs" | "qiskit";
             /** Backend Version */
             backend_version: string | null;
             /** Algorithm Name */

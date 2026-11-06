@@ -1695,6 +1695,7 @@ function QuantumComputing({
   const qulacs = integrations.find((item) => item.id === "qulacs-qaoa");
   const fujitsu = integrations.find((item) => item.id === "fujitsu-qarp");
   const [depth, setDepth] = useState(1);
+  const [backend, setBackend] = useState<"qulacs" | "qiskit">("qulacs");
   const [optimizer, setOptimizer] = useState<"spsa" | "coordinate">("spsa");
   const [iterations, setIterations] = useState(5);
   const [shots, setShots] = useState(128);
@@ -1702,7 +1703,8 @@ function QuantumComputing({
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState("");
   const [result, setResult] = useState<QuantumQAOAResult | null>(null);
-  const available = qulacs?.status === "available";
+  const selectedCapability = backend === "qulacs" ? qulacs : qiskit;
+  const available = selectedCapability?.status === "available";
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1712,6 +1714,7 @@ function QuantumComputing({
     try {
       const next = await api.runQuantumQAOA({
         example: "synthetic-import-export",
+        backend,
         depth,
         optimizer,
         max_iterations: iterations,
@@ -1736,28 +1739,28 @@ function QuantumComputing({
       <div className={`quantum-callout ${available ? "quantum-callout-ready" : ""}`}>
         <span>✳</span>
         <div>
-          <strong>{available ? "Qulacs simulator available" : "Quantum execution is unavailable"}</strong>
+          <strong>{available ? `${backend === "qiskit" ? "Qiskit" : "Qulacs"} simulator available` : `${backend === "qiskit" ? "Qiskit" : "Qulacs"} execution is unavailable`}</strong>
           <p>
             {available
-              ? "Run a bounded QAOA experiment on the installed local state-vector simulator."
-              : "Qulacs has not been detected by the API service; no simulation result will be fabricated."}
+              ? "Run a bounded QAOA experiment on the selected installed local state-vector simulator."
+              : `${backend === "qiskit" ? "Qiskit" : "Qulacs"} has not been detected by the API service; no simulation result will be fabricated.`}
           </p>
         </div>
       </div>
       <div className="integration-grid">
         <Panel
-          title="QAOA with Qulacs"
-          subtitle="Optional local CPU state-vector simulation"
+          title="QAOA simulator availability"
+          subtitle="Select an installed optional local state-vector backend in the experiment workspace."
         >
           <div className="integration-status">
             <div className="integration-icon qiskit-icon">Q</div>
             <div>
-              <Badge>
-                {qulacs?.status.replaceAll("_", " ") ?? "Not reported"}
+              <Badge tone={available ? "good" : "warn"}>
+                {selectedCapability?.status.replaceAll("_", " ") ?? "Not reported"}
               </Badge>
-              <h3>{available ? "Ready for simulation" : "Unavailable in API environment"}</h3>
+              <h3>{available ? `Ready for ${backend === "qiskit" ? "Qiskit" : "Qulacs"} simulation` : "Unavailable in API environment"}</h3>
               <p>
-                {qulacs?.description ?? "Backend availability has not been reported by the API."}
+                {selectedCapability?.description ?? "Backend availability has not been reported by the API."}
               </p>
             </div>
           </div>
@@ -1772,7 +1775,7 @@ function QuantumComputing({
             </div>
             <div>
               <span>Qiskit adapter</span>
-              <Badge>{qiskit?.status.replaceAll("_", " ") ?? "Not implemented"}</Badge>
+              <Badge tone={qiskit?.status === "available" ? "good" : "warn"}>{qiskit?.status.replaceAll("_", " ") ?? "Not reported"}</Badge>
             </div>
           </div>
         </Panel>
@@ -1806,12 +1809,20 @@ function QuantumComputing({
       </div>
       <Panel
         title="QAOA experiment workspace"
-        subtitle="Run a real Qulacs simulation on the labelled five-variable synthetic import-export example."
+        subtitle="Run QAOA on the selected local simulator using the labelled five-variable synthetic import-export example."
         className="quantum-workspace-panel"
       >
         <div className="quantum-run-grid">
           <form className="quantum-run-form" onSubmit={submit}>
             <div className="quantum-control-grid">
+              <label>
+                Simulator backend
+                <select value={backend} onChange={(event) => setBackend(event.target.value as "qulacs" | "qiskit")} disabled={running}>
+                  <option value="qulacs">Qulacs</option>
+                  <option value="qiskit">Qiskit StatevectorSampler</option>
+                </select>
+                <small>{selectedCapability?.description ?? "Backend availability has not been reported by the API."}</small>
+              </label>
               <label>
                 Circuit depth p
                 <select value={depth} onChange={(event) => setDepth(Number(event.target.value))} disabled={!available || running}>
@@ -1847,9 +1858,9 @@ function QuantumComputing({
             </div>
             {runError && <div className="quantum-run-error" role="alert">{runError}</div>}
             <button className="primary-button quantum-run-button" type="submit" disabled={!available || running}>
-              {running ? "Executing QAOA on Qulacs…" : "Run QAOA experiment"}
+              {running ? `Executing QAOA on ${backend === "qiskit" ? "Qiskit" : "Qulacs"}…` : "Run QAOA experiment"}
             </button>
-            {!available && <p className="quantum-unavailable-note">Install `requirements-quantum.txt` in the API environment to enable this action.</p>}
+            {!available && <p className="quantum-unavailable-note">Install `{backend === "qiskit" ? "requirements-qiskit.txt" : "requirements-quantum.txt"}` in the API environment to enable this action.</p>}
           </form>
           <div className="quantum-result-area" aria-live="polite">
             {!result && !running && (

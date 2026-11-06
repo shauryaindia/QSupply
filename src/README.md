@@ -128,23 +128,26 @@ time, configuration and seed. Current records are single-run observations,
 not statistical performance claims. The API run-history service remains
 CVRP-specific and is not changed by this core solver milestone.
 
-## Optional Qulacs QAOA
+## Optional QAOA backends
 
-Install the simulator separately from the core package and web dependencies:
+The bounded QAOA optimizer and canonical circuit mathematics live in QSupply.
+Install either optional simulator separately from the core package and web
+dependencies:
 
 ```sh
 python3 -m pip install -r requirements-quantum.txt
 PYTHONPATH=src python3 examples/qulacs_qaoa.py
+python3 -m pip install -r requirements-qiskit.txt
+PYTHONPATH=src python3 examples/qiskit_qaoa.py
 ```
 
-`QAOAConfig`, `run_qaoa` and `build_qaoa_circuit_plan` implement the algorithm
-without importing a simulator SDK. `QulacsQAOASolver` in
-`qsupply.backends.qulacs` adapts the common `SolverRequest`/`SolverResult`
-contract to Qulacs CPU state vectors; requesting execution when Qulacs is
-missing returns an explicit failed result. A solver request must use the Ising
-representation, whose declared variable order maps directly to Qulacs qubit
-indices. Qulacs integer samples use bit `i` for qubit `i`, and the adapter
-decodes them in that same order.
+`QulacsQAOASolver` and `QiskitQAOASolver` adapt the common
+`SolverRequest`/`SolverResult` contract to their respective local simulators;
+each SDK is lazily imported and optional. A request must use the Ising
+representation. QSupply variable index `i` maps to qubit `i`. Qulacs integer
+samples use bit `i` for qubit `i`; Qiskit count strings display high-index
+classical bits at the left, so the Qiskit adapter reverses the printed string
+before assigning QSupply variables.
 
 For each layer, QAOA prepares `|+>` states, evolves the variable-dependent
 Ising cost Hamiltonian, then applies the transverse-field X mixer. The shared
@@ -166,9 +169,23 @@ search are included as classical angle optimizers. The API currently exposes
 only a labelled five-variable synthetic import-export problem and compares it
 with the exact enumerator when requested. Feasibility is assessed using the
 provided independent validator; QAOA samples alone do not imply an operational
-plan. Qulacs here is a classical state-vector simulator, not quantum hardware
-or evidence of quantum advantage. Qiskit and Fujitsu QARP adapters are not
-implemented. See [`examples/qulacs_qaoa.py`](../examples/qulacs_qaoa.py).
+plan. Qulacs and Qiskit `StatevectorSampler` are classical state-vector
+simulators, not quantum hardware or evidence of quantum advantage. The API
+allows explicit backend selection and never substitutes a different backend
+when the selected dependency is missing. `benchmark_qaoa_backends` compares
+exact enumeration and selected QAOA adapters using the same QUBO, offset,
+validator and business objective. It records one whole-call local timing
+measurement; this is not a statistically reliable performance claim and does
+not compare hardware execution. Reported circuit depths use each adapter's
+native circuit representation, so they are descriptive and not directly
+comparable across different gate decompositions. See
+[`examples/qulacs_qaoa.py`](../examples/qulacs_qaoa.py) and
+[`examples/qiskit_qaoa.py`](../examples/qiskit_qaoa.py).
+
+The Qiskit optional dependency is constrained to SDK 2.6.x in
+[`requirements-qiskit.txt`](../requirements-qiskit.txt). Qiskit is not required
+to import or use core QSupply. Fujitsu QARP remains a separate integration
+target; no QARP package or operational adapter is included.
 
 ## CVRP route data model
 
