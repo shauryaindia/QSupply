@@ -80,8 +80,8 @@ ising = qubo_to_ising(formulation.qubo, offset=formulation.offset)
 # ising.energy_from_binary(bits) == formulation.full_energy(bits)
 ```
 
-This is a mathematical representation only; it does not build a quantum
-circuit or connect to a solver backend.
+The optional Qulacs adapter described below consumes this representation to
+build and execute circuits. Conversion itself remains backend-independent.
 
 ## Common solver contract and exact QUBO reference
 
@@ -128,6 +128,44 @@ time, configuration and seed. Current records are single-run observations,
 not statistical performance claims. The API run-history service remains
 CVRP-specific and is not changed by this core solver milestone.
 
+## Optional Qulacs QAOA
+
+Install the simulator separately from the core package and web dependencies:
+
+```sh
+python3 -m pip install -r requirements-quantum.txt
+PYTHONPATH=src python3 examples/qulacs_qaoa.py
+```
+
+`QAOAConfig`, `run_qaoa` and `build_qaoa_circuit_plan` implement the algorithm
+without importing a simulator SDK. `QulacsQAOASolver` in
+`qsupply.backends.qulacs` adapts the common `SolverRequest`/`SolverResult`
+contract to Qulacs CPU state vectors; requesting execution when Qulacs is
+missing returns an explicit failed result. A solver request must use the Ising
+representation, whose declared variable order maps directly to Qulacs qubit
+indices. Qulacs integer samples use bit `i` for qubit `i`, and the adapter
+decodes them in that same order.
+
+For each layer, QAOA prepares `|+>` states, evolves the variable-dependent
+Ising cost Hamiltonian, then applies the transverse-field X mixer. Qulacs
+rotation signs implement the standard `exp(-i γ H_cost)` and
+`exp(-i β ΣX)` evolution. The Ising constant is omitted from circuit gates
+because it contributes only a global phase, then restored by independent
+QUBO/full-energy evaluation. The variable-dependent cost is divided by its
+maximum absolute coefficient (a positive scale); reported energies remain in
+the original units. Gate angles are floating-point values, while discrete
+sample energies are recalculated using exact model arithmetic where supported.
+
+The bounded implementation supports up to 12 variables, depth 1–3, 16–2,048
+shots per evaluation and 1–25 optimizer updates. Seeded SPSA and coordinate
+search are included as classical angle optimizers. The API currently exposes
+only a labelled five-variable synthetic import-export problem and compares it
+with the exact enumerator when requested. Feasibility is assessed using the
+provided independent validator; QAOA samples alone do not imply an operational
+plan. Qulacs here is a classical state-vector simulator, not quantum hardware
+or evidence of quantum advantage. Qiskit and Fujitsu QARP adapters are not
+implemented. See [`examples/qulacs_qaoa.py`](../examples/qulacs_qaoa.py).
+
 ## CVRP route data model
 
 `CVRPProblem` represents one depot, customer delivery demands, vehicle-specific
@@ -145,8 +183,10 @@ nearest-neighbour construction followed by best-improvement 2-opt within each
 route. The result contains routes, the initial nearest-neighbour distance, the
 post-2-opt distance, and percentage improvement. This is a heuristic with no
 global-optimality guarantee. Greedy assignment can fail to find a solution for
-some feasible CVRPs; such cases raise a clear construction error. No QAOA,
-quantum advantage, or real-world map integration is implemented.
+some feasible CVRPs; such cases raise a clear construction error. The QAOA
+adapter described above currently supports QUBO/Ising examples, not CVRP
+optimization. Quantum advantage and real-world map integration are not
+implemented.
 
 ## CVRP benchmarking and exact reference
 

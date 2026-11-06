@@ -175,6 +175,19 @@ class SolverResult:
     status: ExecutionStatus
     termination_reason: str | None = None
     error: str | None = None
+    backend_name: str | None = None
+    backend_version: str | None = None
+    algorithm_name: str | None = None
+    algorithm_version: str | None = None
+    sample_count: int = 0
+    sample_frequencies: Mapping[tuple[int, ...], int] = field(default_factory=dict)
+    best_sample_frequency: int | None = None
+    average_sampled_energy: Real | None = None
+    feasible_sample_rate: float | None = None
+    optimizer_iterations: int = 0
+    circuit_depth: int | None = None
+    optimization_time_seconds: float = 0.0
+    circuit_execution_time_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "variable_order", tuple(self.variable_order))
@@ -193,6 +206,13 @@ class SolverResult:
         if not isinstance(self.configuration, Mapping):
             raise TypeError("configuration must be a mapping")
         object.__setattr__(self, "configuration", MappingProxyType(dict(self.configuration)))
+        if not isinstance(self.sample_frequencies, Mapping):
+            raise TypeError("sample_frequencies must be a mapping")
+        object.__setattr__(
+            self,
+            "sample_frequencies",
+            MappingProxyType(dict(self.sample_frequencies)),
+        )
         object.__setattr__(self, "feasibility_details", tuple(self.feasibility_details))
 
 

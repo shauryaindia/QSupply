@@ -68,18 +68,19 @@ Our vision is to bridge Operations Research, Artificial Intelligence, and Quantu
 
 ## Planned Framework Integrations
 
-No external solver or framework integrations are implemented yet. The following are
-planned options for future integrations; their presence here does not indicate
-current support:
+The following framework integrations remain planned; their presence here does
+not indicate current support:
 
 - OR-Tools
 - Pyomo
 - PuLP
 - Qiskit
 - PennyLane
-- Qulacs
 - NumPy
 - SciPy
+
+Qulacs is implemented as an optional local simulator integration for the bounded
+QAOA workflow described below. It is not a hosted quantum service.
 
 ---
 
@@ -129,8 +130,8 @@ Rather than assuming a particular optimization paradigm is superior, QSupply aim
 🚧 QSupply is an early local prototype. It includes tested Python optimization
 models, CVRP heuristic and exact solvers, benchmarking, an optional API, and a
 browser dashboard. A bounded synthetic multimodal route and disruption-recovery
-demonstration is implemented; production data integrations and quantum execution
-are not.
+demonstration is implemented; production data integrations and Qiskit or Fujitsu
+quantum services are not.
 
 Current focus:
 - System architecture and core optimization framework
@@ -157,8 +158,9 @@ lane capacities as a QUBO. The constant offset is retained separately;
 decoding, original-data feasibility checks and business-cost evaluation are
 provided independently of the QUBO penalty energy. A small synthetic example
 uses exhaustive enumeration only to verify the five-bit formulation. This is
-not a general solver. Qiskit, QAOA, Fujitsu QARP/Qulacs, and other solver
-integrations remain unimplemented.
+not a general solver. The optional Qulacs QAOA workflow below currently runs a
+separate synthetic QUBO example; Qiskit and Fujitsu QARP integrations remain
+unimplemented.
 
 ### Implemented functionality: QUBO-to-Ising conversion
 
@@ -167,8 +169,7 @@ J[i,j] z[i] z[j]`, using `z[i] = 1 - 2*x[i]` (bit 0 is spin +1; bit 1 is
 spin -1). It combines the QUBO's supplied ordered-pair coefficients for each
 unordered pair, preserves declared variable/register order, and accepts a
 separate constant offset. Integer and rational coefficients are converted
-with exact rational factors. This conversion does not provide a circuit or
-quantum backend; QAOA and framework integrations remain planned work. See
+with exact rational factors. See
 [`src/README.md`](src/README.md#qubo-to-ising-conversion).
 
 ### Implemented functionality: exact QUBO reference execution
@@ -178,9 +179,24 @@ available for small QUBOs. The default maximum is 12 variables (4,096
 assignments); it enumerates all assignments and is intended as a classical
 reference for future adapters, not a scalable optimizer. Results separate
 QUBO/full/Ising energy from
-optional domain feasibility and business objective. Quantum circuits, QAOA,
-Qulacs, and Fujitsu QARP are still not implemented. See
+optional domain feasibility and business objective. See
 [`src/README.md`](src/README.md#common-solver-contract-and-exact-qubo-reference).
+
+### Implemented functionality: bounded QAOA on optional Qulacs simulator
+
+QSupply includes a backend-neutral QAOA circuit plan and a separate optional
+Qulacs CPU state-vector adapter. It prepares an all-`|+>` register, applies
+cost evolution for the converted Ising Hamiltonian and an `X` mixer at each
+layer, then optimizes angles with seeded SPSA or coordinate search and samples
+the final circuit. The initial API limits runs to 12 variables, depth 3, 25
+optimizer iterations and 2,048 shots per evaluation. The sample dashboard
+workflow uses only a labelled five-variable synthetic import-export QUBO.
+Every selected bitstring is rescored against the original QUBO and full offset;
+domain feasibility is reported only after the independent validator runs.
+This is local classical state-vector simulation, not execution on quantum
+hardware, a performance claim, or evidence of quantum advantage. Qiskit and
+Fujitsu QARP remain unavailable. Install `requirements-quantum.txt` to enable
+the optional adapter. See [`src/README.md`](src/README.md#optional-qulacs-qaoa).
 
 ### Implemented functionality: CVRP route heuristic
 
@@ -189,8 +205,9 @@ capacities, and a complete distance matrix. The dependency-free
 `NearestNeighborTwoOptSolver` constructs capacity-feasible routes and applies
 2-opt local search, with a synthetic five-customer, two-vehicle example in
 [`examples/cvrp_synthetic.py`](examples/cvrp_synthetic.py). It is a heuristic
-and is not guaranteed to find a globally optimal solution. QAOA, quantum
-advantage, and real-world map integration are not implemented.
+and is not guaranteed to find a globally optimal solution. Quantum hardware
+execution, quantum advantage, and real-world map integration are not
+implemented.
 
 ### Implemented functionality: CVRP benchmarking
 

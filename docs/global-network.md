@@ -208,7 +208,9 @@ provider or self-hosted tiles in accordance with the provider's policy.
 This demonstration does not provide live data ingestion, user-defined network
 editing, automated disruption detection, production-grade route schedules,
 geographic clustering, real shipment tracking, a global MILP/CP-SAT solver,
-general QUBO solving, Qiskit/QAOA or Fujitsu QARP integration. The implemented
+general QUBO solving, a QAOA-based route optimizer, or Fujitsu QARP integration.
+The separate bounded synthetic QUBO QAOA workflow is not connected to this
+network planner. The implemented
 assignment planner is a bounded classical exact search over candidate routes,
 not a quantum solver and not a globally optimal network path guarantee.
 Road/rail alignments and ocean/air geometries are illustrative waypoint paths,

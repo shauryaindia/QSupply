@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
-import { api, type GlobalOptimization, type RouteIntelligence, type RunRecord } from "./api/client";
+import { api, type GlobalOptimization, type QuantumQAOAResult, type RouteIntelligence, type RunRecord } from "./api/client";
 
 vi.mock("./GlobalNetworkMap", () => ({
   default: () => <div data-testid="global-map" />,
@@ -21,6 +21,7 @@ vi.mock("./api/client", async (importOriginal) => {
     api: {
       health: vi.fn(),
       capabilities: vi.fn(),
+      runQuantumQAOA: vi.fn(),
       instances: vi.fn(),
       network: vi.fn(),
       globalNetwork: vi.fn(),
@@ -87,7 +88,12 @@ beforeEach(() => {
       {
         id: "qiskit-qaoa",
         status: "not_implemented",
-        description: "No Qiskit or QAOA integration is implemented.",
+        description: "No Qiskit adapter is implemented.",
+      },
+      {
+        id: "qulacs-qaoa",
+        status: "optional_dependency_missing",
+        description: "Install requirements-quantum.txt to enable Qulacs QAOA execution.",
       },
       {
         id: "fujitsu-qarp",
@@ -202,7 +208,7 @@ describe("QSupply dashboard interactions", () => {
     );
   });
 
-  it("shows unverified quantum integrations rather than a fabricated connection", async () => {
+  it("shows unavailable Qulacs execution honestly when the optional backend is missing", async () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("heading", { name: "Control tower", level: 1 });
@@ -210,8 +216,81 @@ describe("QSupply dashboard interactions", () => {
     expect(
       await screen.findByText("Quantum execution is unavailable"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run QAOA experiment" })).toBeDisabled();
     expect(screen.getByText("Not configured or verified")).toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("submits a real QAOA request and displays returned measured results", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.capabilities).mockResolvedValue({
+      solvers: [],
+      features: [],
+      integrations: [
+        { id: "qiskit-qaoa", status: "not_implemented", description: "No Qiskit adapter." },
+        { id: "qulacs-qaoa", status: "available", description: "QAOA on Qulacs 0.6.14." },
+        { id: "fujitsu-qarp", status: "not_configured_or_verified", description: "No QARP adapter." },
+      ],
+      exact_cvrp_customer_limit: 10,
+    });
+    const quantumResult: QuantumQAOAResult = {
+      run_id: "qaoa-test-run",
+      status: "completed",
+      backend_name: "Qulacs state-vector simulator",
+      backend_version: "0.6.14",
+      algorithm_name: "Quantum Approximate Optimization Algorithm",
+      algorithm_version: "1.0",
+      example: "synthetic-import-export",
+      synthetic: true,
+      variable_count: 5,
+      variable_order: ["x0", "x1", "x2", "x3", "x4"],
+      depth: 1,
+      optimizer: "spsa",
+      optimizer_iterations: 1,
+      shots_per_evaluation: 32,
+      cost_normalization_scale: "20",
+      final_sample_count: 32,
+      total_sample_count: 160,
+      random_seed: 2026,
+      best_binary_assignment: { x0: 0, x1: 1, x2: 1, x3: 0, x4: 1 },
+      best_spin_assignment: { x0: 1, x1: -1, x2: -1, x3: 1, x4: -1 },
+      best_sample_frequency: 9,
+      sample_frequencies: [{ bitstring: "01101", count: 9 }, { bitstring: "00000", count: 23 }],
+      qubo_energy: "-43",
+      full_energy: "17",
+      ising_energy: "17",
+      average_sampled_energy: "26/1",
+      exact_reference_energy: "17",
+      energy_gap_percent: 0,
+      feasible: true,
+      feasible_sample_rate: 0.5,
+      decoded_solution: { S1: "B", S2: "A" },
+      business_objective: "17",
+      optimization_time_seconds: 0.02,
+      circuit_execution_time_seconds: 0.01,
+      exact_reference_time_seconds: 0.003,
+      elapsed_seconds: 0.04,
+    };
+    vi.mocked(api.runQuantumQAOA).mockResolvedValue(quantumResult);
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
+    await user.click(await screen.findByRole("button", { name: "Run QAOA experiment" }));
+
+    expect(api.runQuantumQAOA).toHaveBeenCalledWith({
+      example: "synthetic-import-export",
+      depth: 1,
+      optimizer: "spsa",
+      max_iterations: 5,
+      shots: 128,
+      random_seed: 2026,
+      compare_exact: true,
+    });
+    expect(await screen.findByText("QAOA measured result")).toBeInTheDocument();
+    expect(screen.getByText("S1: B")).toBeInTheDocument();
+    expect(screen.getAllByText("17.000").length).toBeGreaterThan(1);
+    expect(screen.getByText("Best observed")).toBeInTheDocument();
   });
 
   it("loads a runnable named global demo and its explicit assignment scope", async () => {

@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from qsupply import ExactCVRPSolver, NearestNeighborTwoOptSolver, generate_synthetic_cvrp
+from qsupply.backends.qulacs import QulacsBackend
 from qsupply.api.app import create_app
 
 
@@ -43,6 +44,10 @@ class TestQSupplyAPI(unittest.TestCase):
             feature["id"]: feature["status"] for feature in capabilities["integrations"]
         }
         self.assertEqual(integrations["qiskit-qaoa"], "not_implemented")
+        self.assertEqual(
+            integrations["qulacs-qaoa"],
+            "available" if QulacsBackend.is_available() else "optional_dependency_missing",
+        )
         self.assertEqual(integrations["fujitsu-qarp"], "not_configured_or_verified")
         instances = self.client.get("/api/v1/instances").json()
         self.assertTrue(all(instance["synthetic"] for instance in instances))

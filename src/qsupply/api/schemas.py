@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 from math import isfinite
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
@@ -77,6 +77,63 @@ class RunRecord(BaseModel):
 
 class RunListResponse(BaseModel):
     items: list[RunRecord]
+
+
+class QuantumQAOARequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    example: Literal["synthetic-import-export"] = "synthetic-import-export"
+    depth: StrictInt = Field(default=1, ge=1, le=3)
+    optimizer: Literal["spsa", "coordinate"] = "spsa"
+    max_iterations: StrictInt = Field(default=5, ge=1, le=25)
+    shots: StrictInt = Field(default=128, ge=16, le=2048)
+    random_seed: StrictInt = Field(default=2026, ge=0, le=2147483647)
+    compare_exact: bool = True
+
+
+class QuantumSampleFrequency(BaseModel):
+    bitstring: str
+    count: int
+
+
+class QuantumQAOAResponse(BaseModel):
+    run_id: str
+    status: str
+    backend_name: str
+    backend_version: str | None
+    algorithm_name: str
+    algorithm_version: str
+    example: str
+    synthetic: bool = True
+    variable_count: int
+    variable_order: list[str]
+    depth: int
+    optimizer: str
+    optimizer_iterations: int
+    shots_per_evaluation: int
+    cost_normalization_scale: str
+    final_sample_count: int
+    total_sample_count: int
+    random_seed: int
+    best_binary_assignment: dict[str, int] | None
+    best_spin_assignment: dict[str, int] | None
+    best_sample_frequency: int | None
+    sample_frequencies: list[QuantumSampleFrequency]
+    qubo_energy: str | None
+    full_energy: str | None
+    ising_energy: str | None
+    average_sampled_energy: str | None
+    exact_reference_energy: str | None
+    exact_reference_time_seconds: float | None
+    energy_gap_percent: float | None
+    feasible: bool | None
+    feasible_sample_rate: float | None
+    decoded_solution: dict[str, str] | None
+    business_objective: str | None
+    optimization_time_seconds: float
+    circuit_execution_time_seconds: float
+    elapsed_seconds: float
+    error: str | None = None
 
 
 class InstanceSummary(BaseModel):

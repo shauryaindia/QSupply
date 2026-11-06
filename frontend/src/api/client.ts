@@ -12,6 +12,7 @@ export type CandidateRoute = components["schemas"]["CandidateRouteResponse"];
 export type RouteIntelligence = components["schemas"]["RouteIntelligenceResponse"];
 export type GlobalOptimization = components["schemas"]["GlobalOptimizationRecord"];
 export type GlobalDemo = components["schemas"]["GlobalDemoScenarioResponse"];
+export type QuantumQAOAResult = components["schemas"]["QuantumQAOAResponse"];
 
 type RunCreate = paths["/api/v1/runs"]["post"]["requestBody"] extends {
   content: { "application/json": infer Body };
@@ -43,6 +44,11 @@ type GlobalScenarioCreate = paths["/api/v1/global/scenarios"]["post"]["requestBo
   ? Body
   : never;
 type DecisionQuestion = paths["/api/v1/global/optimizations/{run_id}/questions"]["post"]["requestBody"] extends {
+  content: { "application/json": infer Body };
+}
+  ? Body
+  : never;
+type QuantumQAOARequest = paths["/api/v1/quantum/qubo-runs"]["post"]["requestBody"] extends {
   content: { "application/json": infer Body };
 }
   ? Body
@@ -107,6 +113,11 @@ export const api = {
   health: () =>
     request<components["schemas"]["HealthResponse"]>("/api/v1/health"),
   capabilities: () => request<Capabilities>("/api/v1/capabilities"),
+  runQuantumQAOA: (input: QuantumQAOARequest) =>
+    request<QuantumQAOAResult>("/api/v1/quantum/qubo-runs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   instances: () => request<InstanceSummary[]>("/api/v1/instances"),
   network: () => request<NetworkResponse>("/api/v1/networks/demo"),
   globalNetwork: () => request<NetworkResponse>("/api/v1/global/network"),

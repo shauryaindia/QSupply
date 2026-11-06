@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quantum/qubo-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Quantum Qaoa */
+        post: operations["run_quantum_qaoa_api_v1_quantum_qubo_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances": {
         parameters: {
             query?: never;
@@ -821,6 +838,139 @@ export interface components {
             /** Weighted Objective */
             weighted_objective: number;
         };
+        /** QuantumQAOARequest */
+        QuantumQAOARequest: {
+            /**
+             * Example
+             * @default synthetic-import-export
+             * @constant
+             */
+            example: "synthetic-import-export";
+            /**
+             * Depth
+             * @default 1
+             */
+            depth: number;
+            /**
+             * Optimizer
+             * @default spsa
+             * @enum {string}
+             */
+            optimizer: "spsa" | "coordinate";
+            /**
+             * Max Iterations
+             * @default 5
+             */
+            max_iterations: number;
+            /**
+             * Shots
+             * @default 128
+             */
+            shots: number;
+            /**
+             * Random Seed
+             * @default 2026
+             */
+            random_seed: number;
+            /**
+             * Compare Exact
+             * @default true
+             */
+            compare_exact: boolean;
+        };
+        /** QuantumQAOAResponse */
+        QuantumQAOAResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+            /** Backend Name */
+            backend_name: string;
+            /** Backend Version */
+            backend_version: string | null;
+            /** Algorithm Name */
+            algorithm_name: string;
+            /** Algorithm Version */
+            algorithm_version: string;
+            /** Example */
+            example: string;
+            /**
+             * Synthetic
+             * @default true
+             */
+            synthetic: boolean;
+            /** Variable Count */
+            variable_count: number;
+            /** Variable Order */
+            variable_order: string[];
+            /** Depth */
+            depth: number;
+            /** Optimizer */
+            optimizer: string;
+            /** Optimizer Iterations */
+            optimizer_iterations: number;
+            /** Shots Per Evaluation */
+            shots_per_evaluation: number;
+            /** Cost Normalization Scale */
+            cost_normalization_scale: string;
+            /** Final Sample Count */
+            final_sample_count: number;
+            /** Total Sample Count */
+            total_sample_count: number;
+            /** Random Seed */
+            random_seed: number;
+            /** Best Binary Assignment */
+            best_binary_assignment: {
+                [key: string]: number;
+            } | null;
+            /** Best Spin Assignment */
+            best_spin_assignment: {
+                [key: string]: number;
+            } | null;
+            /** Best Sample Frequency */
+            best_sample_frequency: number | null;
+            /** Sample Frequencies */
+            sample_frequencies: components["schemas"]["QuantumSampleFrequency"][];
+            /** Qubo Energy */
+            qubo_energy: string | null;
+            /** Full Energy */
+            full_energy: string | null;
+            /** Ising Energy */
+            ising_energy: string | null;
+            /** Average Sampled Energy */
+            average_sampled_energy: string | null;
+            /** Exact Reference Energy */
+            exact_reference_energy: string | null;
+            /** Exact Reference Time Seconds */
+            exact_reference_time_seconds: number | null;
+            /** Energy Gap Percent */
+            energy_gap_percent: number | null;
+            /** Feasible */
+            feasible: boolean | null;
+            /** Feasible Sample Rate */
+            feasible_sample_rate: number | null;
+            /** Decoded Solution */
+            decoded_solution: {
+                [key: string]: string;
+            } | null;
+            /** Business Objective */
+            business_objective: string | null;
+            /** Optimization Time Seconds */
+            optimization_time_seconds: number;
+            /** Circuit Execution Time Seconds */
+            circuit_execution_time_seconds: number;
+            /** Elapsed Seconds */
+            elapsed_seconds: number;
+            /** Error */
+            error?: string | null;
+        };
+        /** QuantumSampleFrequency */
+        QuantumSampleFrequency: {
+            /** Bitstring */
+            bitstring: string;
+            /** Count */
+            count: number;
+        };
         /** RouteAnalysisResponse */
         RouteAnalysisResponse: {
             /** Route Id */
@@ -1219,6 +1369,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CapabilitiesResponse"];
+                };
+            };
+        };
+    };
+    run_quantum_qaoa_api_v1_quantum_qubo_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuantumQAOARequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuantumQAOAResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

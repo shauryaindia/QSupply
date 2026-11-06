@@ -34,6 +34,7 @@ import {
   type NetworkResponse,
   type RunRecord,
   type SolverId,
+  type QuantumQAOAResult,
 } from "./api/client";
 import type { components } from "./api/generated";
 
@@ -1691,50 +1692,87 @@ function QuantumComputing({
 }) {
   const integrations = capabilities?.integrations ?? [];
   const qiskit = integrations.find((item) => item.id === "qiskit-qaoa");
+  const qulacs = integrations.find((item) => item.id === "qulacs-qaoa");
   const fujitsu = integrations.find((item) => item.id === "fujitsu-qarp");
+  const [depth, setDepth] = useState(1);
+  const [optimizer, setOptimizer] = useState<"spsa" | "coordinate">("spsa");
+  const [iterations, setIterations] = useState(5);
+  const [shots, setShots] = useState(128);
+  const [seed, setSeed] = useState(2026);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState("");
+  const [result, setResult] = useState<QuantumQAOAResult | null>(null);
+  const available = qulacs?.status === "available";
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!available || running) return;
+    setRunning(true);
+    setRunError("");
+    try {
+      const next = await api.runQuantumQAOA({
+        example: "synthetic-import-export",
+        depth,
+        optimizer,
+        max_iterations: iterations,
+        shots,
+        random_seed: seed,
+        compare_exact: true,
+      });
+      setResult(next);
+      if (next.status !== "completed") {
+        setRunError(next.error ?? "The QAOA run did not complete.");
+      }
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : "QAOA execution failed.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <>
-      <PageHeader page="quantum" eyebrow="PLATFORM / QUANTUM READINESS" />
-      <div className="quantum-callout">
+      <PageHeader page="quantum" eyebrow="PLATFORM / QUANTUM EXECUTION" />
+      <div className={`quantum-callout ${available ? "quantum-callout-ready" : ""}`}>
         <span>✳</span>
         <div>
-          <strong>Quantum execution is unavailable</strong>
+          <strong>{available ? "Qulacs simulator available" : "Quantum execution is unavailable"}</strong>
           <p>
-            No quantum job has been submitted from this application. This view
-            reports integration status only.
+            {available
+              ? "Run a bounded QAOA experiment on the installed local state-vector simulator."
+              : "Qulacs has not been detected by the API service; no simulation result will be fabricated."}
           </p>
         </div>
       </div>
       <div className="integration-grid">
         <Panel
-          title="Qiskit + QAOA"
-          subtitle="Quantum optimization integration"
+          title="QAOA with Qulacs"
+          subtitle="Optional local CPU state-vector simulation"
         >
           <div className="integration-status">
             <div className="integration-icon qiskit-icon">Q</div>
             <div>
               <Badge>
-                {qiskit?.status.replaceAll("_", " ") ?? "Not implemented"}
+                {qulacs?.status.replaceAll("_", " ") ?? "Not reported"}
               </Badge>
-              <h3>Not implemented</h3>
+              <h3>{available ? "Ready for simulation" : "Unavailable in API environment"}</h3>
               <p>
-                {qiskit?.description ??
-                  "No Qiskit or QAOA adapter is available."}
+                {qulacs?.description ?? "Backend availability has not been reported by the API."}
               </p>
             </div>
           </div>
           <div className="integration-details">
             <div>
-              <span>QUBO formulation</span>
+              <span>QUBO → Ising conversion</span>
               <Badge tone="good">Available</Badge>
             </div>
             <div>
-              <span>General QUBO solver</span>
-              <Badge>Unavailable</Badge>
+              <span>QAOA circuit execution</span>
+              <Badge tone={available ? "good" : "warn"}>{available ? "Available" : "Unavailable"}</Badge>
             </div>
             <div>
-              <span>Quantum experiment history</span>
-              <Badge>Unavailable</Badge>
+              <span>Qiskit adapter</span>
+              <Badge>{qiskit?.status.replaceAll("_", " ") ?? "Not implemented"}</Badge>
             </div>
           </div>
         </Panel>
@@ -1766,6 +1804,107 @@ function QuantumComputing({
           </div>
         </Panel>
       </div>
+      <Panel
+        title="QAOA experiment workspace"
+        subtitle="Run a real Qulacs simulation on the labelled five-variable synthetic import-export example."
+        className="quantum-workspace-panel"
+      >
+        <div className="quantum-run-grid">
+          <form className="quantum-run-form" onSubmit={submit}>
+            <div className="quantum-control-grid">
+              <label>
+                Circuit depth p
+                <select value={depth} onChange={(event) => setDepth(Number(event.target.value))} disabled={!available || running}>
+                  {[1, 2, 3].map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+                <small>Number of cost and mixer layer pairs.</small>
+              </label>
+              <label>
+                Optimizer
+                <select value={optimizer} onChange={(event) => setOptimizer(event.target.value as "spsa" | "coordinate")} disabled={!available || running}>
+                  <option value="spsa">SPSA</option>
+                  <option value="coordinate">Coordinate search</option>
+                </select>
+                <small>Classical method that tunes QAOA angles.</small>
+              </label>
+              <label>
+                Iteration limit
+                <input type="number" min={1} max={25} value={iterations} onChange={(event) => setIterations(Number(event.target.value))} disabled={!available || running} />
+                <small>Maximum optimizer updates (1–25).</small>
+              </label>
+              <label>
+                Shots per evaluation
+                <select value={shots} onChange={(event) => setShots(Number(event.target.value))} disabled={!available || running}>
+                  {[16, 32, 64, 128, 256, 512, 1024, 2048].map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+                <small>Measurements used to estimate each energy.</small>
+              </label>
+              <label className="quantum-seed-control">
+                Random seed
+                <input type="number" min={0} max={2147483647} value={seed} onChange={(event) => setSeed(Number(event.target.value))} disabled={!available || running} />
+                <small>Controls parameter initialization and simulator sampling.</small>
+              </label>
+            </div>
+            {runError && <div className="quantum-run-error" role="alert">{runError}</div>}
+            <button className="primary-button quantum-run-button" type="submit" disabled={!available || running}>
+              {running ? "Executing QAOA on Qulacs…" : "Run QAOA experiment"}
+            </button>
+            {!available && <p className="quantum-unavailable-note">Install `requirements-quantum.txt` in the API environment to enable this action.</p>}
+          </form>
+          <div className="quantum-result-area" aria-live="polite">
+            {!result && !running && (
+              <div className="quantum-empty-state">
+                <strong>No experiment run yet</strong>
+                <p>Results appear here only after the API executes QAOA and returns measured samples.</p>
+              </div>
+            )}
+            {running && <div className="quantum-empty-state"><strong>Simulation running</strong><p>Waiting for the configured optimizer iterations and final measurement batch.</p></div>}
+            {result && (
+              <div className="quantum-result">
+                <div className="quantum-result-heading">
+                  <div><strong>QAOA measured result</strong><small>{result.backend_name} {result.backend_version ?? "version unavailable"} · {result.variable_count} variables · p={result.depth}</small></div>
+                  <Badge tone={result.status === "completed" ? "good" : "bad"}>{result.status}</Badge>
+                </div>
+                <div className="quantum-result-kpis">
+                  <div><span>Best sampled full energy</span><strong>{formatDistance(result.full_energy)}</strong></div>
+                  <div><span>Exact reference</span><strong>{formatDistance(result.exact_reference_energy)}</strong></div>
+                  <div><span>Penalized-energy gap</span><strong>{result.energy_gap_percent === null ? "Unavailable" : `${formatNumber(result.energy_gap_percent, 2)}%`}</strong></div>
+                  <div><span>Feasible final samples</span><strong>{result.feasible_sample_rate === null ? "Not checked" : `${formatNumber(result.feasible_sample_rate * 100, 1)}%`}</strong></div>
+                </div>
+                <div className="quantum-result-meta">
+                  <span>QUBO energy {formatDistance(result.qubo_energy)}</span>
+                  <span>Mean sampled energy {formatDistance(result.average_sampled_energy)}</span>
+                  <span>Final samples {result.final_sample_count} / {result.total_sample_count} total measurements</span>
+                  <span>Optimizer updates {result.optimizer_iterations} · seed {result.random_seed}</span>
+                  <span>Variable cost scale {formatDistance(result.cost_normalization_scale)}</span>
+                  <span>Optimization {formatNumber(result.optimization_time_seconds, 3)} s · circuit execution {formatNumber(result.circuit_execution_time_seconds, 3)} s</span>
+                  <span>Exact reference runtime {formatNumber(result.exact_reference_time_seconds, 3)} s</span>
+                </div>
+                {result.feasible && result.decoded_solution && (
+                  <div className="quantum-decoded-plan">
+                    <strong>Validated shipment choices</strong>
+                    {Object.entries(result.decoded_solution).map(([shipment, option]) => <span key={shipment}>{shipment}: {option}</span>)}
+                    {result.business_objective !== null && <small>Business objective: {formatDistance(result.business_objective)}</small>}
+                  </div>
+                )}
+                {result.feasible === false && <div className="quantum-run-error">The best measured assignment is not operationally feasible. Its energy is not presented as a valid supply-chain plan.</div>}
+                <div className="quantum-sample-table-wrap">
+                  <table className="quantum-sample-table">
+                    <thead><tr><th>Measured bits (variable order)</th><th>Count in final batch</th></tr></thead>
+                    <tbody>{result.sample_frequencies.slice(0, 8).map((sample) => {
+                      const assignment = Object.fromEntries(result.variable_order.map((variable, index) => [variable, Number(sample.bitstring[index])])) as Record<string, number>;
+                      const variableSummary = Object.entries(assignment).map(([name, bit]) => `${name}=${bit}`).join(" · ");
+                      const bestBits = result.variable_order.map((variable) => result.best_binary_assignment?.[variable] ?? 0).join("");
+                      return <tr key={sample.bitstring}><td title={variableSummary}><code>{sample.bitstring}</code>{sample.bitstring === bestBits && <Badge tone="blue">Best observed</Badge>}</td><td>{sample.count}</td></tr>;
+                    })}</tbody>
+                  </table>
+                  <small>Bitstrings follow the QUBO variable order. The row count is from the final measurement batch; optimizer samples are included in the total measurement count above.</small>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Panel>
       <Panel
         title="Solver-agnostic foundation"
         subtitle="Current building blocks reported by the backend"

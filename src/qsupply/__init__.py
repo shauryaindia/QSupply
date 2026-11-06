@@ -14,6 +14,14 @@ from .solver import (
     SolverResult,
     benchmark_solvers,
 )
+from .qaoa import (
+    CircuitOperation,
+    QAOAConfig,
+    QAOAExecution,
+    SampleBatch,
+    build_qaoa_circuit_plan,
+    run_qaoa,
+)
 from .import_export import (
     FeasibilityReport,
     ImportExportEvaluation,
@@ -56,6 +64,12 @@ __all__ = [
     "Solver",
     "ExactQUBOSolver",
     "benchmark_solvers",
+    "QAOAConfig",
+    "CircuitOperation",
+    "SampleBatch",
+    "QAOAExecution",
+    "build_qaoa_circuit_plan",
+    "run_qaoa",
     "TransportOption",
     "Shipment",
     "ImportExportProblem",

@@ -9,7 +9,17 @@ from uuid import uuid4
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from qsupply import MAX_EXACT_CUSTOMERS
+from qsupply import (
+    MAX_EXACT_CUSTOMERS,
+    ExactQUBOSolver,
+    ProblemRepresentation,
+    QAOAConfig,
+    SolverRequest,
+    evaluate_business_objective,
+    formulate_import_export_qubo,
+    synthetic_import_export_problem,
+)
+from qsupply.backends.qulacs import QulacsQAOASolver, QulacsBackend
 from qsupply.network.global_demo import (
     global_demo_disruptions,
     global_demo_network,
@@ -53,6 +63,9 @@ from .schemas import (
     InstanceSummary,
     NetworkScenario,
     NetworkResponse,
+    QuantumQAOARequest,
+    QuantumQAOAResponse,
+    QuantumSampleFrequency,
     RunCreateRequest,
     RunListResponse,
     RunRecord,
@@ -63,6 +76,10 @@ from .schemas import (
     SolverId,
 )
 from .storage import create_run_store
+
+
+def _energy_text(value: object) -> str | None:
+    return None if value is None else str(value)
 
 
 def create_app(
@@ -122,10 +139,133 @@ def create_app(
                 CapabilityStatus(id="milp", status="unavailable", description="No MILP adapter is implemented."),
             ],
             integrations=[
-                CapabilityStatus(id="qiskit-qaoa", status="not_implemented", description="No Qiskit or QAOA integration is implemented."),
+                CapabilityStatus(id="qiskit-qaoa", status="not_implemented", description="No Qiskit adapter is implemented; QAOA is available through the optional Qulacs simulator."),
+                CapabilityStatus(
+                    id="qulacs-qaoa",
+                    status="available" if QulacsBackend.is_available() else "optional_dependency_missing",
+                    description=(
+                        f"QAOA executes on Qulacs {QulacsBackend.version()} CPU state-vector simulation."
+                        if QulacsBackend.is_available()
+                        else "Install requirements-quantum.txt to enable Qulacs QAOA execution."
+                    ),
+                ),
                 CapabilityStatus(id="fujitsu-qarp", status="not_configured_or_verified", description="No QARP adapter or verified FX700 connection is configured."),
             ],
             exact_cvrp_customer_limit=MAX_EXACT_CUSTOMERS,
+        )
+
+    @app.post(
+        "/api/v1/quantum/qubo-runs",
+        response_model=QuantumQAOAResponse,
+        status_code=201,
+        tags=["quantum"],
+    )
+    def run_quantum_qaoa(request: QuantumQAOARequest) -> QuantumQAOAResponse:
+        if not QulacsBackend.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail="Qulacs is an optional dependency and is not installed on this API service.",
+            )
+        problem = synthetic_import_export_problem()
+        formulation = formulate_import_export_qubo(problem)
+        config = QAOAConfig(
+            depth=request.depth,
+            optimizer=request.optimizer,
+            max_iterations=request.max_iterations,
+            shots=request.shots,
+            random_seed=request.random_seed,
+        )
+        solver_request = SolverRequest(
+            qubo=formulation.qubo,
+            constant_offset=formulation.offset,
+            representation=ProblemRepresentation.ISING,
+            validator=formulation.check_feasibility,
+            decoder=formulation.decode,
+            business_objective=lambda selections: evaluate_business_objective(
+                problem, selections
+            ),
+            random_seed=request.random_seed,
+            configuration={"example": request.example},
+        )
+        result = QulacsQAOASolver(config).solve(solver_request)
+
+        exact_energy = None
+        exact_elapsed = None
+        gap = None
+        if request.compare_exact:
+            exact_result = ExactQUBOSolver().solve(
+                SolverRequest(
+                    qubo=formulation.qubo,
+                    constant_offset=formulation.offset,
+                    validator=formulation.check_feasibility,
+                    decoder=formulation.decode,
+                    business_objective=lambda selections: evaluate_business_objective(
+                        problem, selections
+                    ),
+                )
+            )
+            exact_energy = exact_result.full_energy
+            exact_elapsed = exact_result.execution_time_seconds
+            if result.full_energy is not None and exact_energy != 0:
+                gap = float(
+                    (result.full_energy - exact_energy) / abs(exact_energy) * 100
+                )
+
+        variables = formulation.qubo.variables
+        return QuantumQAOAResponse(
+            run_id=result.run_id,
+            status=result.status.value,
+            backend_name=result.backend_name or "Qulacs state-vector simulator",
+            backend_version=result.backend_version,
+            algorithm_name=result.algorithm_name or "QAOA",
+            algorithm_version=result.algorithm_version or "unknown",
+            example=request.example,
+            variable_count=len(variables),
+            variable_order=list(variables),
+            depth=request.depth,
+            optimizer=request.optimizer,
+            optimizer_iterations=result.optimizer_iterations,
+            shots_per_evaluation=request.shots,
+            cost_normalization_scale=str(
+                result.configuration.get("cost_normalization_scale", "1")
+            ),
+            final_sample_count=sum(result.sample_frequencies.values()),
+            total_sample_count=result.sample_count,
+            random_seed=request.random_seed,
+            best_binary_assignment=(
+                dict(result.best_binary_assignment)
+                if result.best_binary_assignment is not None
+                else None
+            ),
+            best_spin_assignment=(
+                dict(result.best_spin_assignment)
+                if result.best_spin_assignment is not None
+                else None
+            ),
+            best_sample_frequency=result.best_sample_frequency,
+            sample_frequencies=[
+                QuantumSampleFrequency(bitstring="".join(map(str, bits)), count=count)
+                for bits, count in sorted(result.sample_frequencies.items())
+            ],
+            qubo_energy=_energy_text(result.qubo_energy),
+            full_energy=_energy_text(result.full_energy),
+            ising_energy=_energy_text(result.ising_energy),
+            average_sampled_energy=_energy_text(result.average_sampled_energy),
+            exact_reference_energy=_energy_text(exact_energy),
+            exact_reference_time_seconds=exact_elapsed,
+            energy_gap_percent=gap,
+            feasible=result.feasible,
+            feasible_sample_rate=result.feasible_sample_rate,
+            decoded_solution=(
+                dict(result.decoded_solution)
+                if result.decoded_solution is not None
+                else None
+            ),
+            business_objective=_energy_text(result.business_objective),
+            optimization_time_seconds=result.optimization_time_seconds,
+            circuit_execution_time_seconds=result.circuit_execution_time_seconds,
+            elapsed_seconds=result.execution_time_seconds,
+            error=result.error,
         )
 
     @app.get("/api/v1/instances", response_model=list[InstanceSummary], tags=["cvrp"])
