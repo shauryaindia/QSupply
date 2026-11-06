@@ -83,6 +83,51 @@ ising = qubo_to_ising(formulation.qubo, offset=formulation.offset)
 This is a mathematical representation only; it does not build a quantum
 circuit or connect to a solver backend.
 
+## Common solver contract and exact QUBO reference
+
+The backend-independent execution types are exported from `qsupply`:
+`Solver`, `SolverMetadata`, `SolverRequest`, `SolverResult`, and the backend,
+representation, and status enums. Backend SDK objects do not appear in this
+interface. A solver reports both its candidate energy and QSupply's
+independently recalculated QUBO/full energy. The result also keeps Ising
+energy, optional feasibility, decoded plan, and business objective separate.
+
+`ExactQUBOSolver` exhaustively evaluates every binary assignment through
+`QUBO.energy`. It has a configurable variable limit, defaulting to 12
+variables (4,096 assignments). This conservative default reflects the
+exponential candidate count and the repeated coefficient evaluation for each
+candidate; callers can explicitly raise it when that cost is acceptable.
+Dense QUBOs require additional work per assignment. It is a deterministic
+small-instance classical reference, not a quantum solver or a scalable optimizer. Equal
+energies resolve to the lexicographically first bit tuple in declared variable
+order. Integer and rational energies are not converted to floats. The
+separately supplied constant offset is included in `full_energy` and the
+converted `ising_energy`.
+
+```python
+from qsupply import ExactQUBOSolver, QUBO, SolverRequest
+
+problem = QUBO(("choose_a", "choose_b"), {
+    ("choose_a", "choose_a"): -2,
+    ("choose_b", "choose_b"): -3,
+    ("choose_a", "choose_b"): 4,
+})
+result = ExactQUBOSolver().solve(SolverRequest(problem, constant_offset=10))
+print(dict(result.best_binary_assignment))
+print(result.qubo_energy, result.full_energy, result.ising_energy)
+```
+
+An optional domain validator receives the full assignment. Decoding and a
+business-objective callback run only if it reports feasibility. For
+import-export formulations, pass the existing independent methods, for
+example `validator=formulation.check_feasibility` and
+`decoder=formulation.decode`; this keeps business feasibility distinct from
+minimum QUBO energy. `benchmark_solvers(request, solvers)` captures comparable
+problem size, solver identity, energy, feasibility, candidate count, elapsed
+time, configuration and seed. Current records are single-run observations,
+not statistical performance claims. The API run-history service remains
+CVRP-specific and is not changed by this core solver milestone.
+
 ## CVRP route data model
 
 `CVRPProblem` represents one depot, customer delivery demands, vehicle-specific

@@ -148,7 +148,6 @@ variables. It evaluates `E(x) = Σ Q[i,j] × x[i] × x[j]` for a complete
 assignment and reports clear errors for missing, unknown, or non-binary
 assignment values. Boolean assignments (`False`/`True`) are also accepted as
 0/1. See [`src/README.md`](src/README.md) for a usage example and test command.
-QAOA and solver framework integrations remain planned work.
 
 ### Implemented functionality: import-export QUBO formulation
 
@@ -168,9 +167,20 @@ J[i,j] z[i] z[j]`, using `z[i] = 1 - 2*x[i]` (bit 0 is spin +1; bit 1 is
 spin -1). It combines the QUBO's supplied ordered-pair coefficients for each
 unordered pair, preserves declared variable/register order, and accepts a
 separate constant offset. Integer and rational coefficients are converted
-with exact rational factors. This conversion does not provide a circuit,
-quantum backend, or QUBO solver; QAOA and framework integrations remain
-planned work. See [`src/README.md`](src/README.md#qubo-to-ising-conversion).
+with exact rational factors. This conversion does not provide a circuit or
+quantum backend; QAOA and framework integrations remain planned work. See
+[`src/README.md`](src/README.md#qubo-to-ising-conversion).
+
+### Implemented functionality: exact QUBO reference execution
+
+The backend-neutral solver contract and deterministic `ExactQUBOSolver` are
+available for small QUBOs. The default maximum is 12 variables (4,096
+assignments); it enumerates all assignments and is intended as a classical
+reference for future adapters, not a scalable optimizer. Results separate
+QUBO/full/Ising energy from
+optional domain feasibility and business objective. Quantum circuits, QAOA,
+Qulacs, and Fujitsu QARP are still not implemented. See
+[`src/README.md`](src/README.md#common-solver-contract-and-exact-qubo-reference).
 
 ### Implemented functionality: CVRP route heuristic
 

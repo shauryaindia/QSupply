@@ -2,6 +2,18 @@
 
 from .qubo import QUBO
 from .ising import IsingModel, qubo_to_ising
+from .solver import (
+    BackendType,
+    ExactQUBOSolver,
+    ExecutionStatus,
+    ProblemRepresentation,
+    Solver,
+    SolverBenchmarkRecord,
+    SolverMetadata,
+    SolverRequest,
+    SolverResult,
+    benchmark_solvers,
+)
 from .import_export import (
     FeasibilityReport,
     ImportExportEvaluation,
@@ -34,6 +46,16 @@ __all__ = [
     "QUBO",
     "IsingModel",
     "qubo_to_ising",
+    "BackendType",
+    "ProblemRepresentation",
+    "ExecutionStatus",
+    "SolverMetadata",
+    "SolverRequest",
+    "SolverResult",
+    "SolverBenchmarkRecord",
+    "Solver",
+    "ExactQUBOSolver",
+    "benchmark_solvers",
     "TransportOption",
     "Shipment",
     "ImportExportProblem",
