@@ -12,12 +12,21 @@ from types import MappingProxyType
 from typing import Any
 from uuid import uuid4
 
+from ..execution import (
+    ExecutionError,
+    ExecutionErrorCategory,
+    ExecutionMetadata,
+    ExecutionMode,
+    ExecutionTimings,
+    classify_execution_error,
+)
 from ..ising import IsingModel
 from ..qaoa import (
     MAX_QAOA_DEPTH,
     MAX_QAOA_SHOTS,
     MAX_QAOA_VARIABLES,
     QAOAConfig,
+    SamplingRequest,
     SampleBatch,
     run_qaoa,
 )
@@ -29,8 +38,11 @@ from ..solver import (
     SolverRequest,
     SolverResult,
 )
+from ._versions import is_release_version_in_range
 
 QAOA_ALGORITHM_VERSION = "1.0"
+QISKIT_MIN_VERSION = (2, 6, 2)
+QISKIT_MAX_VERSION_EXCLUSIVE = (2, 7, 0)
 
 
 class QiskitUnavailableError(ImportError):
@@ -43,9 +55,14 @@ def _load_qiskit() -> tuple[Any, Any, Any]:
         circuit_module = importlib.import_module("qiskit.circuit")
         primitives = importlib.import_module("qiskit.primitives")
         sdk_version = version("qiskit")
-        if sdk_version.split(".", maxsplit=1)[0] != "2":
+        if not is_release_version_in_range(
+            sdk_version,
+            minimum=QISKIT_MIN_VERSION,
+            maximum_exclusive=QISKIT_MAX_VERSION_EXCLUSIVE,
+        ):
             raise QiskitUnavailableError(
-                f"QSupply requires Qiskit SDK 2.x; found {sdk_version}"
+                "QSupply requires Qiskit SDK >=2.6.2,<2.7; "
+                f"found {sdk_version!r}"
             )
         return (
             qiskit.QuantumCircuit,
@@ -69,6 +86,7 @@ class QiskitBackend:
     """
 
     name = "Qiskit StatevectorSampler (local state-vector simulator)"
+    backend_id = "qiskit-statevector-sampler"
 
     @staticmethod
     def is_available() -> bool:
@@ -87,12 +105,28 @@ class QiskitBackend:
 
     def sample(
         self,
-        ising: IsingModel,
-        gammas: tuple[float, ...],
-        betas: tuple[float, ...],
-        shots: int,
-        seed: int,
+        ising: SamplingRequest | IsingModel,
+        gammas: tuple[float, ...] | None = None,
+        betas: tuple[float, ...] | None = None,
+        shots: int | None = None,
+        seed: int | None = None,
     ) -> SampleBatch:
+        """Sample a canonical request; legacy positional calls remain supported."""
+        if isinstance(ising, SamplingRequest):
+            if any(value is not None for value in (gammas, betas, shots, seed)):
+                raise TypeError("a SamplingRequest must be passed without extra arguments")
+            sampling_request = ising
+        else:
+            if not isinstance(ising, IsingModel):
+                raise TypeError("ising must be a SamplingRequest or IsingModel")
+            if gammas is None or betas is None or shots is None or seed is None:
+                raise TypeError("legacy sampling calls require gammas, betas, shots and seed")
+            sampling_request = SamplingRequest(ising, gammas, betas, shots, seed)
+        ising = sampling_request.ising_model
+        gammas = sampling_request.gammas
+        betas = sampling_request.betas
+        shots = sampling_request.shots
+        seed = sampling_request.seed
         if not isinstance(ising, IsingModel):
             raise TypeError("ising must be an IsingModel")
         if not 1 <= len(ising.variables) <= MAX_QAOA_VARIABLES:
@@ -108,21 +142,50 @@ class QiskitBackend:
         if isinstance(seed, bool) or not isinstance(seed, int):
             raise TypeError("seed must be an integer")
 
+        QuantumCircuit, ParameterVector, sampler_type = _load_qiskit()
         started = perf_counter()
-        circuit, parameters = build_qiskit_qaoa_circuit(ising, len(gammas))
+        circuit, parameters = _build_qiskit_qaoa_circuit(
+            ising, len(gammas), QuantumCircuit, ParameterVector
+        )
         gamma_parameters, beta_parameters = parameters
         bindings = {
-            **dict(zip(gamma_parameters, gammas, strict=True)),
-            **dict(zip(beta_parameters, betas, strict=True)),
+            **{
+                parameter: value
+                for parameter, value in zip(gamma_parameters, gammas, strict=True)
+                if parameter in circuit.parameters
+            },
+            **{
+                parameter: value
+                for parameter, value in zip(beta_parameters, betas, strict=True)
+                if parameter in circuit.parameters
+            },
         }
         bound_circuit = circuit.assign_parameters(bindings)
-        _, _, sampler_type = _load_qiskit()
         sampler = sampler_type(seed=seed)
         result = sampler.run([bound_circuit], shots=shots).result()
         counts = result[0].data.meas.get_counts()
         elapsed = perf_counter() - started
         return SampleBatch(
-            decode_qiskit_counts(counts, len(ising.variables)), elapsed
+            counts=decode_qiskit_counts(counts, len(ising.variables)),
+            execution_time_seconds=elapsed,
+            variable_order=ising.variables,
+            backend_id=self.backend_id,
+            backend_name=self.name,
+            backend_version=self.version(),
+            requested_shots=shots,
+            seed=seed,
+            execution_metadata=ExecutionMetadata(
+                backend_id=self.backend_id,
+                backend_name=self.name,
+                backend_version=self.version(),
+                execution_mode=ExecutionMode.LOCAL_SIMULATOR,
+                timing_scope=(
+                    "local sample-call wall time: circuit construction and parameter "
+                    "binding through StatevectorSampler result/count retrieval; "
+                    "excludes Qiskit SDK loading; no queue or remote timing"
+                ),
+                timings=ExecutionTimings(),
+            ),
         )
 
     def circuit_depth(self, ising: IsingModel, depth: int) -> int:
@@ -133,7 +196,12 @@ class QiskitBackend:
 def build_qiskit_qaoa_circuit(
     ising: IsingModel, depth: int
 ) -> tuple[Any, tuple[tuple[Any, ...], tuple[Any, ...]]]:
-    """Create a parameterized circuit for the shared canonical QAOA equations."""
+    """Create a parameterized circuit and return only its active parameters.
+
+    A zero-cost Ising model has no gamma-dependent cost gates, so its gamma
+    parameters are omitted from the returned tuple. Every returned parameter
+    can be bound directly to the generated circuit.
+    """
     if not isinstance(ising, IsingModel):
         raise TypeError("ising must be an IsingModel")
     if not 1 <= len(ising.variables) <= MAX_QAOA_VARIABLES:
@@ -145,6 +213,20 @@ def build_qiskit_qaoa_circuit(
     ):
         raise ValueError(f"depth must be between 1 and {MAX_QAOA_DEPTH}")
     QuantumCircuit, ParameterVector, _ = _load_qiskit()
+    circuit, (gammas, betas) = _build_qiskit_qaoa_circuit(
+        ising, depth, QuantumCircuit, ParameterVector
+    )
+    active_parameters = circuit.parameters
+    return circuit, (
+        tuple(parameter for parameter in gammas if parameter in active_parameters),
+        tuple(parameter for parameter in betas if parameter in active_parameters),
+    )
+
+
+def _build_qiskit_qaoa_circuit(
+    ising: IsingModel, depth: int, QuantumCircuit: Any, ParameterVector: Any
+) -> tuple[Any, tuple[tuple[Any, ...], tuple[Any, ...]]]:
+    """Build a circuit using already loaded SDK classes for consistent timing."""
     qubit_count = len(ising.variables)
     gammas = ParameterVector("gamma", depth)
     betas = ParameterVector("beta", depth)
@@ -249,7 +331,13 @@ class QiskitQAOASolver:
                 from dataclasses import replace
 
                 config = replace(config, random_seed=request.random_seed)
-            execution = run_qaoa(ising, self.backend.sample, config)
+            execution = run_qaoa(
+                ising,
+                self.backend,
+                config,
+                source_qubo=request.qubo,
+                constant_offset=request.constant_offset,
+            )
             assignment = dict(zip(request.variable_order, execution.best_bits, strict=True))
             spins = {
                 variable: 1 - 2 * assignment[variable]
@@ -266,6 +354,8 @@ class QiskitQAOASolver:
             feasible_sample_rate = _sample_feasibility_rate(
                 request, execution.final_samples.counts
             )
+            sample_energies = execution.sample_energies
+            average_sampled_energy = execution.average_sampled_energy
             status = (
                 ExecutionStatus.FAILED
                 if validation_error is not None
@@ -302,24 +392,46 @@ class QiskitQAOASolver:
                     if status is ExecutionStatus.COMPLETED else None
                 ),
                 error=validation_error, backend_name=self.backend.name,
+                error_details=(
+                    ExecutionError(
+                        ExecutionErrorCategory.VALIDATION_FAILURE, validation_error
+                    )
+                    if validation_error is not None
+                    else None
+                ),
                 backend_version=self.backend.version(),
                 algorithm_name="Quantum Approximate Optimization Algorithm",
                 algorithm_version=QAOA_ALGORITHM_VERSION,
                 sample_count=sample_count,
                 sample_frequencies=execution.final_samples.counts,
                 best_sample_frequency=execution.best_sample_frequency,
-                average_sampled_energy=execution.average_sampled_energy,
+                average_sampled_energy=average_sampled_energy,
                 feasible_sample_rate=feasible_sample_rate,
                 optimizer_iterations=execution.optimizer_iterations,
                 circuit_depth=self.backend.circuit_depth(ising, config.depth),
                 optimization_time_seconds=execution.optimization_time_seconds,
                 circuit_execution_time_seconds=execution.circuit_execution_time_seconds,
+                sample_energies=sample_energies,
+                execution_metadata=execution.final_samples.structured_execution_metadata,
+            )
+        except QiskitUnavailableError as error:
+            return self._failed_result(
+                request,
+                error,
+                started,
+                classify_execution_error(error, unavailable_dependency=True),
             )
         except Exception as error:
-            return self._failed_result(request, error, started)
+            return self._failed_result(
+                request, error, started, classify_execution_error(error)
+            )
 
     def _failed_result(
-        self, request: SolverRequest, error: Exception, started: float
+        self,
+        request: SolverRequest,
+        error: Exception,
+        started: float,
+        error_details: ExecutionError,
     ) -> SolverResult:
         config = self.config
         return SolverResult(
@@ -338,7 +450,9 @@ class QiskitQAOASolver:
                 "shots_per_evaluation": config.shots, "random_seed": config.random_seed,
                 "max_variables": config.max_variables,
             }), random_seed=config.random_seed, status=ExecutionStatus.FAILED,
-            error=f"{type(error).__name__}: {error}", backend_name=self.backend.name,
+            error=f"{type(error).__name__}: {error}",
+            error_details=error_details,
+            backend_name=self.backend.name,
             backend_version=self.backend.version(),
             algorithm_name="Quantum Approximate Optimization Algorithm",
             algorithm_version=QAOA_ALGORITHM_VERSION, circuit_depth=None,

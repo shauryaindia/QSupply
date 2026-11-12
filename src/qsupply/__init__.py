@@ -2,6 +2,14 @@
 
 from .qubo import QUBO
 from .ising import IsingModel, qubo_to_ising
+from .execution import (
+    ExecutionError,
+    ExecutionErrorCategory,
+    ExecutionMetadata,
+    ExecutionMode,
+    ExecutionTimings,
+    classify_execution_error,
+)
 from .solver import (
     BackendType,
     ExactQUBOSolver,
@@ -12,12 +20,17 @@ from .solver import (
     SolverMetadata,
     SolverRequest,
     SolverResult,
+    SampleEnergyRecord,
+    average_recomputed_full_energy,
     benchmark_solvers,
+    recompute_sample_energies,
 )
 from .qaoa import (
     CircuitOperation,
     QAOAConfig,
     QAOAExecution,
+    QAOASamplingBackend,
+    SamplingRequest,
     SampleBatch,
     build_qaoa_circuit_plan,
     run_qaoa,
@@ -49,24 +62,42 @@ from .benchmarking import (
     generate_synthetic_cvrp,
     synthetic_benchmark_suite,
 )
-from .quantum_benchmark import QuantumBenchmarkRecord, benchmark_qaoa_backends
+from .quantum_benchmark import (
+    ObjectiveStatistics,
+    QuantumBenchmarkRecord,
+    QuantumBenchmarkReport,
+    QuantumBenchmarkSummary,
+    benchmark_qaoa_backends,
+    benchmark_qaoa_backends_repeated,
+)
 
 __all__ = [
     "QUBO",
     "IsingModel",
     "qubo_to_ising",
+    "ExecutionMode",
+    "ExecutionTimings",
+    "ExecutionMetadata",
+    "ExecutionErrorCategory",
+    "ExecutionError",
+    "classify_execution_error",
     "BackendType",
     "ProblemRepresentation",
     "ExecutionStatus",
     "SolverMetadata",
     "SolverRequest",
     "SolverResult",
+    "SampleEnergyRecord",
+    "average_recomputed_full_energy",
+    "recompute_sample_energies",
     "SolverBenchmarkRecord",
     "Solver",
     "ExactQUBOSolver",
     "benchmark_solvers",
     "QAOAConfig",
     "CircuitOperation",
+    "SamplingRequest",
+    "QAOASamplingBackend",
     "SampleBatch",
     "QAOAExecution",
     "build_qaoa_circuit_plan",
@@ -94,5 +125,9 @@ __all__ = [
     "generate_synthetic_cvrp",
     "synthetic_benchmark_suite",
     "QuantumBenchmarkRecord",
+    "ObjectiveStatistics",
+    "QuantumBenchmarkReport",
+    "QuantumBenchmarkSummary",
     "benchmark_qaoa_backends",
+    "benchmark_qaoa_backends_repeated",
 ]

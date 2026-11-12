@@ -416,6 +416,37 @@ export interface components {
             integrations: components["schemas"]["CapabilityStatus"][];
             /** Exact Cvrp Customer Limit */
             exact_cvrp_customer_limit: number;
+            /** Backends */
+            backends: components["schemas"]["QuantumBackendCapability"][];
+        };
+        /** QuantumBackendCapability */
+        QuantumBackendCapability: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Available */
+            available: boolean;
+            /** Status */
+            status: string;
+            /** Supported Representations */
+            supported_representations: string[];
+            /** Backend Type */
+            backend_type: string;
+            /** Execution Mode */
+            execution_mode: string;
+            /** Optional Dependency */
+            optional_dependency: string;
+            /** Dependency Requirements */
+            dependency_requirements: string;
+            /** Version */
+            version: string | null;
+            /** Supported Configuration */
+            supported_configuration: {
+                [key: string]: unknown;
+            };
         };
         /** CapabilityStatus */
         CapabilityStatus: {
@@ -851,7 +882,7 @@ export interface components {
              * @default qulacs
              * @enum {string}
              */
-            backend: "qulacs" | "qiskit";
+            backend: string;
             /**
              * Depth
              * @default 1
@@ -896,7 +927,7 @@ export interface components {
              * Backend Id
              * @enum {string}
              */
-            backend_id: "qulacs" | "qiskit";
+            backend_id: string;
             /** Backend Version */
             backend_version: string | null;
             /** Algorithm Name */
@@ -942,6 +973,12 @@ export interface components {
             best_sample_frequency: number | null;
             /** Sample Frequencies */
             sample_frequencies: components["schemas"]["QuantumSampleFrequency"][];
+            /** Sample Energies */
+            sample_energies?: components["schemas"]["QuantumSampleEnergy"][];
+            /** Execution Metadata */
+            execution_metadata?: components["schemas"]["QuantumExecutionMetadata"] | null;
+            /** Error Details */
+            error_details?: components["schemas"]["QuantumExecutionError"] | null;
             /** Qubo Energy */
             qubo_energy: string | null;
             /** Full Energy */
@@ -952,6 +989,8 @@ export interface components {
             average_sampled_energy: string | null;
             /** Exact Reference Energy */
             exact_reference_energy: string | null;
+            /** Exact Reference Feasible */
+            exact_reference_feasible?: boolean | null;
             /** Exact Reference Time Seconds */
             exact_reference_time_seconds: number | null;
             /** Energy Gap Percent */
@@ -981,6 +1020,44 @@ export interface components {
             bitstring: string;
             /** Count */
             count: number;
+        };
+        /** QuantumSampleEnergy */
+        QuantumSampleEnergy: {
+            /** Bitstring */
+            bitstring: string;
+            /** Count */
+            count: number;
+            /** Qubo Energy */
+            qubo_energy: string;
+            /** Full Energy */
+            full_energy: string;
+            /** Ising Energy */
+            ising_energy: string;
+        };
+        /** QuantumExecutionTimings */
+        QuantumExecutionTimings: {
+            submission_seconds: number | null;
+            queue_seconds: number | null;
+            remote_execution_seconds: number | null;
+            result_retrieval_seconds: number | null;
+        };
+        /** QuantumExecutionMetadata */
+        QuantumExecutionMetadata: {
+            backend_id: string;
+            backend_name: string;
+            backend_version: string | null;
+            execution_mode: string;
+            timing_scope: string | null;
+            timings: components["schemas"]["QuantumExecutionTimings"];
+            attributes: {
+                [key: string]: unknown;
+            };
+        };
+        /** QuantumExecutionError */
+        QuantumExecutionError: {
+            category: string;
+            message: string;
+            exception_type: string | null;
         };
         /** RouteAnalysisResponse */
         RouteAnalysisResponse: {

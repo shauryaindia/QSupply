@@ -13,6 +13,7 @@ from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 from uuid import uuid4
 
+from .execution import ExecutionError, ExecutionMetadata
 from .ising import IsingModel, qubo_to_ising
 from .qubo import QUBO
 
@@ -148,6 +149,79 @@ class SolverRequest:
 
 
 @dataclass(frozen=True)
+class SampleEnergyRecord:
+    """QSupply-recomputed energies for one unique measured bitstring."""
+
+    qubo_energy: Real
+    full_energy: Real
+    ising_energy: Real
+    frequency: int
+
+    def __post_init__(self) -> None:
+        for name in ("qubo_energy", "full_energy", "ising_energy"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):
+                raise ValueError(f"{name} must be a finite real number")
+        if isinstance(self.frequency, bool) or not isinstance(self.frequency, int) or self.frequency <= 0:
+            raise ValueError("frequency must be a positive integer")
+
+
+def recompute_sample_energies(
+    request: SolverRequest, counts: Mapping[tuple[int, ...], int]
+) -> Mapping[tuple[int, ...], SampleEnergyRecord]:
+    """Recompute every measured sample from QSupply's QUBO, offset and Ising.
+
+    No energy supplied by an SDK is accepted. The returned mapping keys and
+    each bit tuple use the request's canonical variable order.
+    """
+    if not isinstance(request, SolverRequest):
+        raise TypeError("request must be a SolverRequest")
+    if not isinstance(counts, Mapping):
+        raise TypeError("counts must be a mapping")
+    ising = request.ising_model or qubo_to_ising(
+        request.qubo, offset=request.constant_offset
+    )
+    records: dict[tuple[int, ...], SampleEnergyRecord] = {}
+    for raw_bits, frequency in counts.items():
+        bits = tuple(raw_bits)
+        if len(bits) != len(request.variable_order) or any(
+            isinstance(bit, bool) or not isinstance(bit, int) or bit not in (0, 1)
+            for bit in bits
+        ):
+            raise ValueError("sample bitstring must be binary and match variable_order")
+        if isinstance(frequency, bool) or not isinstance(frequency, int) or frequency <= 0:
+            raise ValueError("sample frequencies must be positive integers")
+        assignment = dict(zip(request.variable_order, bits, strict=True))
+        spins = {name: 1 - 2 * assignment[name] for name in request.variable_order}
+        qubo_energy = request.qubo.energy(assignment)
+        full_energy = request.constant_offset + qubo_energy
+        ising_energy = ising.energy(spins)
+        if not _energies_equal(full_energy, ising_energy):
+            raise ArithmeticError(
+                "sample QUBO and Ising energies disagree after offset restoration"
+            )
+        records[bits] = SampleEnergyRecord(
+            qubo_energy=qubo_energy,
+            full_energy=full_energy,
+            ising_energy=ising_energy,
+            frequency=frequency,
+        )
+    return MappingProxyType(records)
+
+
+def average_recomputed_full_energy(
+    records: Mapping[tuple[int, ...], SampleEnergyRecord]
+) -> Real:
+    """Return the frequency-weighted mean of QSupply-recomputed full energies."""
+    if not isinstance(records, Mapping) or not records:
+        raise ValueError("sample energy records must be a non-empty mapping")
+    count = sum(record.frequency for record in records.values())
+    return sum(
+        (record.full_energy * record.frequency for record in records.values()), 0
+    ) / count
+
+
+@dataclass(frozen=True)
 class SolverResult:
     """Immutable, auditable output shared across classical and quantum solvers."""
 
@@ -188,6 +262,11 @@ class SolverResult:
     circuit_depth: int | None = None
     optimization_time_seconds: float = 0.0
     circuit_execution_time_seconds: float = 0.0
+    sample_energies: Mapping[tuple[int, ...], SampleEnergyRecord] = field(
+        default_factory=dict
+    )
+    execution_metadata: ExecutionMetadata | None = None
+    error_details: ExecutionError | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "variable_order", tuple(self.variable_order))
@@ -213,6 +292,41 @@ class SolverResult:
             "sample_frequencies",
             MappingProxyType(dict(self.sample_frequencies)),
         )
+        if not isinstance(self.sample_energies, Mapping):
+            raise TypeError("sample_energies must be a mapping")
+        for bits, record in self.sample_energies.items():
+            if (
+                not isinstance(bits, tuple)
+                or len(bits) != len(self.variable_order)
+                or any(
+                    isinstance(bit, bool) or not isinstance(bit, int) or bit not in (0, 1)
+                    for bit in bits
+                )
+                or not isinstance(record, SampleEnergyRecord)
+            ):
+                raise ValueError("sample_energies must map ordered binary tuples to records")
+        if self.sample_energies and (
+            set(self.sample_energies) != set(self.sample_frequencies)
+            or any(
+                self.sample_energies[bits].frequency != frequency
+                for bits, frequency in self.sample_frequencies.items()
+            )
+        ):
+            raise ValueError("sample energy records must match sample frequencies")
+        object.__setattr__(self, "sample_energies", MappingProxyType(dict(self.sample_energies)))
+        if self.execution_metadata is not None and not isinstance(
+            self.execution_metadata, ExecutionMetadata
+        ):
+            raise TypeError("execution_metadata must be ExecutionMetadata or None")
+        if self.execution_metadata is not None and (
+            self.execution_metadata.backend_name != self.backend_name
+            or self.execution_metadata.backend_version != self.backend_version
+        ):
+            raise ValueError("execution metadata identity must match solver result")
+        if self.error_details is not None and not isinstance(
+            self.error_details, ExecutionError
+        ):
+            raise TypeError("error_details must be ExecutionError or None")
         object.__setattr__(self, "feasibility_details", tuple(self.feasibility_details))
 
 

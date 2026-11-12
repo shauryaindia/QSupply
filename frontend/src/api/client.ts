@@ -2,6 +2,7 @@ import type { components, paths } from "./generated";
 
 export type Capabilities = components["schemas"]["CapabilitiesResponse"];
 export type CapabilityStatus = components["schemas"]["CapabilityStatus"];
+export type QuantumBackendCapability = components["schemas"]["QuantumBackendCapability"];
 export type InstanceSummary = components["schemas"]["InstanceSummary"];
 export type NetworkResponse = components["schemas"]["NetworkResponse"];
 export type RunRecord = components["schemas"]["RunRecord"];

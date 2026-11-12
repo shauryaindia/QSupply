@@ -10,6 +10,14 @@ from types import MappingProxyType
 from typing import Any
 from uuid import uuid4
 
+from ..execution import (
+    ExecutionError,
+    ExecutionErrorCategory,
+    ExecutionMetadata,
+    ExecutionMode,
+    ExecutionTimings,
+    classify_execution_error,
+)
 from ..ising import IsingModel
 from ..qaoa import (
     MAX_QAOA_DEPTH,
@@ -17,6 +25,7 @@ from ..qaoa import (
     MAX_QAOA_SHOTS,
     MAX_QAOA_VARIABLES,
     QAOAConfig,
+    SamplingRequest,
     SampleBatch,
     build_qaoa_circuit_plan,
     run_qaoa,
@@ -29,9 +38,12 @@ from ..solver import (
     SolverRequest,
     SolverResult,
 )
+from ._versions import is_release_version_in_range
 
 
 QAOA_ALGORITHM_VERSION = "1.0"
+QULACS_MIN_VERSION = (0, 6, 12)
+QULACS_MAX_VERSION_EXCLUSIVE = (0, 7, 0)
 
 
 class QulacsUnavailableError(ImportError):
@@ -48,12 +60,13 @@ class QulacsBackend:
     """
 
     name = "Qulacs state-vector simulator"
+    backend_id = "qulacs-statevector-simulator"
 
     @staticmethod
     def is_available() -> bool:
         try:
-            importlib.import_module("qulacs")
-        except (ImportError, OSError):
+            _load_qulacs()
+        except QulacsUnavailableError:
             return False
         return True
 
@@ -66,13 +79,28 @@ class QulacsBackend:
 
     def sample(
         self,
-        ising: IsingModel,
-        gammas: tuple[float, ...],
-        betas: tuple[float, ...],
-        shots: int,
-        seed: int,
+        ising: SamplingRequest | IsingModel,
+        gammas: tuple[float, ...] | None = None,
+        betas: tuple[float, ...] | None = None,
+        shots: int | None = None,
+        seed: int | None = None,
     ) -> SampleBatch:
-        """Build, evolve and sample one real Qulacs circuit."""
+        """Build, evolve and sample; legacy positional calls remain supported."""
+        if isinstance(ising, SamplingRequest):
+            if any(value is not None for value in (gammas, betas, shots, seed)):
+                raise TypeError("a SamplingRequest must be passed without extra arguments")
+            sampling_request = ising
+        else:
+            if not isinstance(ising, IsingModel):
+                raise TypeError("ising must be a SamplingRequest or IsingModel")
+            if gammas is None or betas is None or shots is None or seed is None:
+                raise TypeError("legacy sampling calls require gammas, betas, shots and seed")
+            sampling_request = SamplingRequest(ising, gammas, betas, shots, seed)
+        ising = sampling_request.ising_model
+        gammas = sampling_request.gammas
+        betas = sampling_request.betas
+        shots = sampling_request.shots
+        seed = sampling_request.seed
         if not isinstance(ising, IsingModel):
             raise TypeError("ising must be an IsingModel")
         if not 1 <= len(ising.variables) <= MAX_QAOA_VARIABLES:
@@ -98,7 +126,28 @@ class QulacsBackend:
         # QSupply register index i is the variable at Ising variable_order[i].
         counts = decode_qulacs_samples(raw_samples, len(ising.variables))
         elapsed = perf_counter() - started
-        return SampleBatch(counts=counts, execution_time_seconds=elapsed)
+        return SampleBatch(
+            counts=counts,
+            execution_time_seconds=elapsed,
+            variable_order=ising.variables,
+            backend_id=self.backend_id,
+            backend_name=self.name,
+            backend_version=self.version(),
+            requested_shots=shots,
+            seed=seed,
+            execution_metadata=ExecutionMetadata(
+                backend_id=self.backend_id,
+                backend_name=self.name,
+                backend_version=self.version(),
+                execution_mode=ExecutionMode.LOCAL_SIMULATOR,
+                timing_scope=(
+                    "local sample-call wall time: QSupply circuit-plan and Qulacs "
+                    "circuit/state construction through state evolution and local "
+                    "sample decoding; excludes Qulacs SDK loading; no queue or remote timing"
+                ),
+                timings=ExecutionTimings(),
+            ),
+        )
 
     def circuit_depth(self, ising: IsingModel, depth: int) -> int:
         """Return Qulacs native gate depth for this QSupply QAOA configuration."""
@@ -159,7 +208,13 @@ class QulacsQAOASolver:
                 from dataclasses import replace
 
                 config = replace(config, random_seed=request.random_seed)
-            execution = run_qaoa(ising, self.backend.sample, config)
+            execution = run_qaoa(
+                ising,
+                self.backend,
+                config,
+                source_qubo=request.qubo,
+                constant_offset=request.constant_offset,
+            )
             bits = execution.best_bits
             assignment = dict(zip(request.variable_order, bits))
             spins = {variable: 1 - 2 * assignment[variable] for variable in request.variable_order}
@@ -175,6 +230,8 @@ class QulacsQAOASolver:
             feasible_sample_rate = _sample_feasibility_rate(
                 request, execution.final_samples.counts
             )
+            sample_energies = execution.sample_energies
+            average_sampled_energy = execution.average_sampled_energy
             status = (
                 ExecutionStatus.FAILED
                 if validation_error is not None
@@ -220,6 +277,13 @@ class QulacsQAOASolver:
                     else None
                 ),
                 error=validation_error,
+                error_details=(
+                    ExecutionError(
+                        ExecutionErrorCategory.VALIDATION_FAILURE, validation_error
+                    )
+                    if validation_error is not None
+                    else None
+                ),
                 backend_name=self.backend.name,
                 backend_version=self.backend.version(),
                 algorithm_name="Quantum Approximate Optimization Algorithm",
@@ -227,20 +291,33 @@ class QulacsQAOASolver:
                 sample_count=sample_count,
                 sample_frequencies=execution.final_samples.counts,
                 best_sample_frequency=execution.best_sample_frequency,
-                average_sampled_energy=execution.average_sampled_energy,
+                average_sampled_energy=average_sampled_energy,
                 feasible_sample_rate=feasible_sample_rate,
                 optimizer_iterations=execution.optimizer_iterations,
                 circuit_depth=self.backend.circuit_depth(ising, config.depth),
                 optimization_time_seconds=execution.optimization_time_seconds,
                 circuit_execution_time_seconds=execution.circuit_execution_time_seconds,
+                sample_energies=sample_energies,
+                execution_metadata=execution.final_samples.structured_execution_metadata,
             )
         except QulacsUnavailableError as error:
-            return self._failed_result(request, error, started)
+            return self._failed_result(
+                request,
+                error,
+                started,
+                classify_execution_error(error, unavailable_dependency=True),
+            )
         except Exception as error:
-            return self._failed_result(request, error, started)
+            return self._failed_result(
+                request, error, started, classify_execution_error(error)
+            )
 
     def _failed_result(
-        self, request: SolverRequest, error: Exception, started: float
+        self,
+        request: SolverRequest,
+        error: Exception,
+        started: float,
+        error_details: ExecutionError,
     ) -> SolverResult:
         config = self.config
         return SolverResult(
@@ -277,6 +354,7 @@ class QulacsQAOASolver:
             random_seed=config.random_seed,
             status=ExecutionStatus.FAILED,
             error=f"{type(error).__name__}: {error}",
+            error_details=error_details,
             backend_name=self.backend.name,
             backend_version=self.backend.version(),
             algorithm_name="Quantum Approximate Optimization Algorithm",
@@ -329,11 +407,23 @@ def decode_qulacs_samples(
 
 def _load_qulacs() -> Any:
     try:
-        return importlib.import_module("qulacs")
-    except (ImportError, OSError) as error:
+        qulacs = importlib.import_module("qulacs")
+        sdk_version = version("qulacs")
+    except (ImportError, OSError, PackageNotFoundError) as error:
         raise QulacsUnavailableError(
-            "Qulacs is optional and is not installed; install requirements-quantum.txt"
+            "Qulacs is optional and is not installed or package metadata is "
+            "unavailable; install requirements-quantum.txt"
         ) from error
+    if not is_release_version_in_range(
+        sdk_version,
+        minimum=QULACS_MIN_VERSION,
+        maximum_exclusive=QULACS_MAX_VERSION_EXCLUSIVE,
+    ):
+        raise QulacsUnavailableError(
+            "QSupply requires Qulacs >=0.6.12,<0.7; "
+            f"found {sdk_version!r}"
+        )
+    return qulacs
 
 
 def _energy_equivalent(left: Any, right: Any) -> bool:

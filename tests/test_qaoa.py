@@ -4,9 +4,13 @@ from random import Random
 from unittest.mock import patch
 
 from qsupply import (
+    ExecutionMetadata,
+    ExecutionMode,
     IsingModel,
     QAOAConfig,
+    QAOASamplingBackend,
     QUBO,
+    SamplingRequest,
     SampleBatch,
     SolverRequest,
     build_qaoa_circuit_plan,
@@ -162,8 +166,79 @@ class TestQAOAConfigurationAndPlan(unittest.TestCase):
         self.assertEqual(first.final_samples.counts, second.final_samples.counts)
         self.assertEqual(first.optimizer_iterations, 2)
 
+    def test_formal_sampling_backend_contract_uses_canonical_variable_order(self):
+        ising = IsingModel(("route-b", "route-a"), 0, {"route-b": 1, "route-a": -1}, {})
+        requests = []
+
+        class ContractBackend:
+            def sample(self, request: SamplingRequest) -> SampleBatch:
+                requests.append(request)
+                return SampleBatch(
+                    {(1, 0): request.shots},
+                    0.001,
+                    variable_order=request.variable_order,
+                    backend_id="contract-test",
+                    backend_name="Contract test backend",
+                    backend_version="test-1",
+                    requested_shots=request.shots,
+                    seed=request.seed,
+                    execution_metadata=ExecutionMetadata(
+                        backend_id="contract-test",
+                        backend_name="Contract test backend",
+                        backend_version="test-1",
+                        execution_mode=ExecutionMode.LOCAL_SIMULATOR,
+                        timing_scope="sample",
+                    ),
+                )
+
+        backend = ContractBackend()
+        self.assertIsInstance(backend, QAOASamplingBackend)
+        execution = run_qaoa(
+            ising,
+            backend,
+            QAOAConfig(depth=1, max_iterations=1, shots=16, random_seed=77),
+        )
+        self.assertTrue(requests)
+        self.assertTrue(all(item.variable_order == ("route-b", "route-a") for item in requests))
+        self.assertTrue(all(item.shots == 16 for item in requests))
+        self.assertTrue(all(isinstance(item.seed, int) for item in requests))
+        self.assertEqual(execution.best_bits, (1, 0))
+        self.assertEqual(execution.final_samples.requested_shots, 16)
+        self.assertEqual(execution.final_samples.backend_id, "contract-test")
+        self.assertEqual(execution.final_samples.variable_order, ("route-b", "route-a"))
+
+    def test_formal_sampling_backend_rejects_mismatched_response_metadata(self):
+        ising = IsingModel(("x",), 0, {"x": 1}, {})
+
+        class BadBackend:
+            def sample(self, request: SamplingRequest) -> SampleBatch:
+                return SampleBatch(
+                    {(0,): request.shots},
+                    0,
+                    variable_order=request.variable_order,
+                    backend_id="bad",
+                    backend_name="Bad backend",
+                    requested_shots=request.shots + 1,
+                    seed=request.seed,
+                    execution_metadata=ExecutionMetadata(
+                        backend_id="bad",
+                        backend_name="Bad backend",
+                        execution_mode=ExecutionMode.LOCAL_SIMULATOR,
+                    ),
+                )
+
+        with self.assertRaisesRegex(ValueError, "requested_shots mismatch"):
+            run_qaoa(
+                ising,
+                BadBackend(),
+                QAOAConfig(depth=1, max_iterations=1, shots=16),
+            )
+
 
 class TestQulacsIntegration(unittest.TestCase):
+    def test_qulacs_adapter_implements_sampling_protocol_without_loading_sdk(self):
+        self.assertIsInstance(QulacsBackend(), QAOASamplingBackend)
+
     def test_missing_optional_package_returns_explicit_failed_result(self):
         request = SolverRequest(
             QUBO(("x",), {("x", "x"): 1}),
@@ -179,7 +254,25 @@ class TestQulacsIntegration(unittest.TestCase):
             result = solver.solve(request)
         self.assertEqual(result.status, ExecutionStatus.FAILED)
         self.assertIn("optional and is not installed", result.error)
+        self.assertEqual(
+            result.error_details.category.value, "unavailable_dependency"
+        )
         self.assertIsNone(result.best_binary_assignment)
+
+    @unittest.skipUnless(QulacsBackend.is_available(), "optional Qulacs package not installed")
+    def test_formal_sampling_request_returns_identity_and_canonical_order(self):
+        ising = IsingModel(("v2", "v0", "v1"), 0, {"v2": 0, "v0": 0, "v1": 0}, {})
+        batch = QulacsBackend().sample(SamplingRequest(ising, (0.4,), (0.2,), 32, 771))
+        self.assertEqual(batch.backend_id, "qulacs-statevector-simulator")
+        self.assertIn("Qulacs", batch.backend_name)
+        self.assertIsNotNone(batch.backend_version)
+        self.assertEqual(batch.variable_order, ising.variables)
+        self.assertEqual(batch.requested_shots, 32)
+        self.assertEqual(batch.seed, 771)
+        self.assertEqual(batch.shots, 32)
+        self.assertTrue(all(len(bits) == 3 for bits in batch.counts))
+        self.assertIn("excludes Qulacs SDK loading", batch.execution_metadata["timing_scope"])
+        self.assertIn("sample decoding", batch.execution_metadata["timing_scope"])
 
     @unittest.skipUnless(QulacsBackend.is_available(), "optional Qulacs package not installed")
     def test_complete_qulacs_unitary_matches_canonical_qaoa_and_offset_phase(self):

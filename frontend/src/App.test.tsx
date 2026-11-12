@@ -101,6 +101,36 @@ beforeEach(() => {
         description: "No QARP adapter or FX700 connection is configured.",
       },
     ],
+    backends: [
+      {
+        id: "qulacs",
+        name: "Qulacs state-vector simulator",
+        description: "Local QAOA simulation through Qulacs.",
+        available: false,
+        status: "optional_dependency_missing",
+        supported_representations: ["ising"],
+        backend_type: "simulator",
+        execution_mode: "local_simulator",
+        optional_dependency: "Qulacs",
+        dependency_requirements: "requirements-quantum.txt",
+        version: null,
+        supported_configuration: {},
+      },
+      {
+        id: "qiskit",
+        name: "Qiskit StatevectorSampler",
+        description: "Local QAOA simulation through Qiskit SDK 2.x.",
+        available: false,
+        status: "optional_dependency_missing",
+        supported_representations: ["ising"],
+        backend_type: "simulator",
+        execution_mode: "local_simulator",
+        optional_dependency: "Qiskit SDK 2.x",
+        dependency_requirements: "requirements-qiskit.txt",
+        version: null,
+        supported_configuration: {},
+      },
+    ],
     exact_cvrp_customer_limit: 10,
   });
   vi.mocked(api.instances).mockResolvedValue([
@@ -214,7 +244,7 @@ describe("QSupply dashboard interactions", () => {
     await screen.findByRole("heading", { name: "Control tower", level: 1 });
     await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
     expect(
-      await screen.findByText("Qulacs execution is unavailable"),
+      await screen.findByText("Qulacs state-vector simulator is unavailable"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run QAOA experiment" })).toBeDisabled();
     expect(screen.getByText("Not configured or verified")).toBeInTheDocument();
@@ -231,14 +261,64 @@ describe("QSupply dashboard interactions", () => {
         { id: "qulacs-qaoa", status: "optional_dependency_missing", description: "Install requirements-quantum.txt." },
         { id: "fujitsu-qarp", status: "not_configured_or_verified", description: "No QARP adapter." },
       ],
+      backends: [
+        {
+          id: "qulacs",
+          name: "Qulacs state-vector simulator",
+          description: "Install requirements-quantum.txt.",
+          available: false,
+          status: "optional_dependency_missing",
+          supported_representations: ["ising"],
+          backend_type: "simulator",
+          execution_mode: "local_simulator",
+          optional_dependency: "Qulacs",
+          dependency_requirements: "requirements-quantum.txt",
+          version: null,
+          supported_configuration: {},
+        },
+        {
+          id: "qiskit",
+          name: "Qiskit StatevectorSampler",
+          description: "QAOA on Qiskit 2.6.2 StatevectorSampler.",
+          available: true,
+          status: "available",
+          supported_representations: ["ising"],
+          backend_type: "simulator",
+          execution_mode: "local_simulator",
+          optional_dependency: "Qiskit SDK 2.x",
+          dependency_requirements: "requirements-qiskit.txt",
+          version: "2.6.2",
+          supported_configuration: {},
+        },
+        {
+          id: "registered-test-backend",
+          name: "Registry-provided test backend",
+          description: "Test capability used to verify dynamic backend selection.",
+          available: true,
+          status: "available",
+          supported_representations: ["ising"],
+          backend_type: "simulator",
+          execution_mode: "local_simulator",
+          optional_dependency: "Test adapter",
+          dependency_requirements: "test-only",
+          version: "test",
+          supported_configuration: {
+            depth: { minimum: 2, maximum: 3 },
+            optimizer: { values: ["coordinate"] },
+            max_iterations: { minimum: 3, maximum: 4 },
+            shots: { minimum: 64, maximum: 128 },
+            random_seed: { minimum: 10, maximum: 30 },
+          },
+        },
+      ],
       exact_cvrp_customer_limit: 10,
     });
     const quantumResult: QuantumQAOAResult = {
       run_id: "qaoa-test-run",
       status: "completed",
-      backend_name: "Qiskit StatevectorSampler (local state-vector simulator)",
-      backend_id: "qiskit",
-      backend_version: "2.6.2",
+      backend_name: "Registry-provided test backend",
+      backend_id: "registered-test-backend",
+      backend_version: "test",
       algorithm_name: "Quantum Approximate Optimization Algorithm",
       algorithm_version: "1.0",
       example: "synthetic-import-export",
@@ -277,17 +357,17 @@ describe("QSupply dashboard interactions", () => {
     render(<App />);
     await screen.findByRole("heading", { name: "Control tower", level: 1 });
     await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
-    await user.selectOptions(screen.getByRole("combobox", { name: /Simulator backend/ }), "qiskit");
+    await user.selectOptions(screen.getByRole("combobox", { name: /Quantum backend/ }), "registered-test-backend");
     await user.click(await screen.findByRole("button", { name: "Run QAOA experiment" }));
 
     expect(api.runQuantumQAOA).toHaveBeenCalledWith({
       example: "synthetic-import-export",
-      backend: "qiskit",
-      depth: 1,
-      optimizer: "spsa",
-      max_iterations: 5,
+      backend: "registered-test-backend",
+      depth: 2,
+      optimizer: "coordinate",
+      max_iterations: 4,
       shots: 128,
-      random_seed: 2026,
+      random_seed: 30,
       compare_exact: true,
     });
     expect(await screen.findByText("QAOA measured result")).toBeInTheDocument();

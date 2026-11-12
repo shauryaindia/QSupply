@@ -166,7 +166,11 @@ recalculated using exact model arithmetic where supported.
 The bounded implementation supports up to 12 variables, depth 1–3, 16–2,048
 shots per evaluation and 1–25 optimizer updates. Seeded SPSA and coordinate
 search are included as classical angle optimizers. The API currently exposes
-only a labelled five-variable synthetic import-export problem and compares it
+the supported configuration ranges and optimizer choices per registered
+backend; API requests are checked against those capabilities, and the dashboard
+builds its controls from them. Older capability responses without configuration
+metadata retain bounded UI defaults. It currently exposes only a labelled
+five-variable synthetic import-export problem and compares it
 with the exact enumerator when requested. Feasibility is assessed using the
 provided independent validator; QAOA samples alone do not imply an operational
 plan. Qulacs and Qiskit `StatevectorSampler` are classical state-vector
@@ -174,11 +178,38 @@ simulators, not quantum hardware or evidence of quantum advantage. The API
 allows explicit backend selection and never substitutes a different backend
 when the selected dependency is missing. `benchmark_qaoa_backends` compares
 exact enumeration and selected QAOA adapters using the same QUBO, offset,
-validator and business objective. It records one whole-call local timing
-measurement; this is not a statistically reliable performance claim and does
-not compare hardware execution. Reported circuit depths use each adapter's
-native circuit representation, so they are descriptive and not directly
-comparable across different gate decompositions. See
+validator and business objective. Its legacy `exact_optimum` field is the
+global minimum of the penalized QUBO and can be infeasible;
+`penalized_minimum_feasibility` reports that status. The exhaustive
+`best_feasible_full_energy` and `best_feasible_business_objective` fields are
+separate references, and remain unavailable when there is no validator or no
+feasible assignment. Their corresponding assignment mappings are provided
+separately because the minimum penalized energy and minimum business objective
+can select different feasible plans. The opt-in
+`benchmark_qaoa_backends_repeated` accepts
+explicit independent-run seeds and returns per-run records plus descriptive
+best, worst, mean, median and population standard deviation. Its empirical
+feasibility rate and optimal-feasible success probability are run-level
+fractions over the supplied seeds, not generalized performance claims.
+Per-run times are whole solver-call wall times; aggregate time is their sum.
+The extra exhaustive feasible-reference enumeration is timed separately and
+does not get folded into solver-call durations.
+For integer and rational objective data, statistics also expose exact
+`mean_exact`, `median_exact`, `variance_exact` and (when rational) exact
+population `standard_deviation_exact`; legacy float fields remain available.
+Adapter sample-call timing is separate: both local adapters exclude optional
+SDK loading and include circuit creation through local sample retrieval.
+Qiskit includes parameter binding and StatevectorSampler result retrieval;
+Qulacs includes QSupply plan plus Qulacs circuit/state creation, state
+evolution, and sample decoding. These backend-specific boundaries are recorded
+in each sample batch's `timing_scope`. Submission, queue, remote-execution and
+result-retrieval stage fields remain unavailable because neither adapter
+measures those stages.
+Missing detailed execution metadata remains unavailable rather than inferred;
+the legacy coarse execution-mode label identifies its source. These tools do
+not compare hardware execution. Reported circuit depths use each
+adapter's native circuit representation, so they are descriptive and not
+directly comparable across different gate decompositions. See
 [`examples/qulacs_qaoa.py`](../examples/qulacs_qaoa.py) and
 [`examples/qiskit_qaoa.py`](../examples/qiskit_qaoa.py).
 

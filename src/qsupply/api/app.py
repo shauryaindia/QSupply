@@ -19,8 +19,11 @@ from qsupply import (
     formulate_import_export_qubo,
     synthetic_import_export_problem,
 )
-from qsupply.backends.qulacs import QulacsQAOASolver, QulacsBackend
-from qsupply.backends.qiskit import QiskitBackend, QiskitQAOASolver
+from qsupply.backends.registry import (
+    DEFAULT_QUANTUM_BACKEND_REGISTRY,
+    QuantumBackendRegistry,
+    UnknownQuantumBackendError,
+)
 from qsupply.network.global_demo import (
     global_demo_disruptions,
     global_demo_network,
@@ -64,8 +67,13 @@ from .schemas import (
     InstanceSummary,
     NetworkScenario,
     NetworkResponse,
+    QuantumExecutionError,
+    QuantumExecutionMetadata,
+    QuantumExecutionTimings,
     QuantumQAOARequest,
     QuantumQAOAResponse,
+    QuantumBackendCapability,
+    QuantumSampleEnergy,
     QuantumSampleFrequency,
     RunCreateRequest,
     RunListResponse,
@@ -83,10 +91,24 @@ def _energy_text(value: object) -> str | None:
     return None if value is None else str(value)
 
 
+def _backend_integration_description(backend: dict[str, object]) -> str:
+    description = str(backend["description"])
+    version = backend["version"]
+    if backend["available"] and version:
+        return f"{description} Installed version: {version}."
+    if version is not None:
+        return (
+            f"{description} Detected version: {version}. Install or update "
+            f"{backend['dependency_requirements']} to enable this backend."
+        )
+    return f"{description} Install {backend['dependency_requirements']} to enable this backend."
+
+
 def create_app(
     database_path: str | Path | None = None,
     *,
     database_url: str | None = None,
+    quantum_backend_registry: QuantumBackendRegistry | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="QSupply API",
@@ -94,6 +116,8 @@ def create_app(
         version="0.1.0",
     )
     app.state.run_store = create_run_store(database_path, database_url)
+    backend_registry = quantum_backend_registry or DEFAULT_QUANTUM_BACKEND_REGISTRY
+    app.state.quantum_backend_registry = backend_registry
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -113,6 +137,22 @@ def create_app(
 
     @app.get("/api/v1/capabilities", response_model=CapabilitiesResponse, tags=["system"])
     def capabilities() -> CapabilitiesResponse:
+        backend_capabilities = backend_registry.capabilities()
+        integrations = [
+            CapabilityStatus(
+                id=f"{backend['id']}-qaoa",
+                status=backend["status"],
+                description=_backend_integration_description(backend),
+            )
+            for backend in backend_capabilities
+        ]
+        integrations.append(
+            CapabilityStatus(
+                id="fujitsu-qarp",
+                status="not_configured_or_verified",
+                description="No QARP adapter or verified FX700 connection is configured.",
+            )
+        )
         return CapabilitiesResponse(
             solvers=[
                 SolverCapability(
@@ -139,28 +179,9 @@ def create_app(
                 CapabilityStatus(id="multimodal-route-optimization", status="available_demo", description="Bounded candidate-route generation and capacity-aware assignment on the labelled synthetic network; no general production solver."),
                 CapabilityStatus(id="milp", status="unavailable", description="No MILP adapter is implemented."),
             ],
-            integrations=[
-                CapabilityStatus(
-                    id="qiskit-qaoa",
-                    status="available" if QiskitBackend.is_available() else "optional_dependency_missing",
-                    description=(
-                        f"QAOA executes locally through Qiskit {QiskitBackend.version()} StatevectorSampler."
-                        if QiskitBackend.is_available()
-                        else "Install requirements-qiskit.txt to enable Qiskit StatevectorSampler execution."
-                    ),
-                ),
-                CapabilityStatus(
-                    id="qulacs-qaoa",
-                    status="available" if QulacsBackend.is_available() else "optional_dependency_missing",
-                    description=(
-                        f"QAOA executes on Qulacs {QulacsBackend.version()} CPU state-vector simulation."
-                        if QulacsBackend.is_available()
-                        else "Install requirements-quantum.txt to enable Qulacs QAOA execution."
-                    ),
-                ),
-                CapabilityStatus(id="fujitsu-qarp", status="not_configured_or_verified", description="No QARP adapter or verified FX700 connection is configured."),
-            ],
+            integrations=integrations,
             exact_cvrp_customer_limit=MAX_EXACT_CUSTOMERS,
+            backends=[QuantumBackendCapability(**backend) for backend in backend_capabilities],
         )
 
     @app.post(
@@ -170,17 +191,36 @@ def create_app(
         tags=["quantum"],
     )
     def run_quantum_qaoa(request: QuantumQAOARequest) -> QuantumQAOAResponse:
-        backend_available = (
-            QulacsBackend.is_available()
-            if request.backend == "qulacs"
-            else QiskitBackend.is_available()
+        try:
+            backend_registration = backend_registry.get(request.backend)
+        except UnknownQuantumBackendError as error:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown quantum backend {request.backend!r}.",
+            ) from error
+        configuration_errors = backend_registration.configuration_errors(
+            {
+                "depth": request.depth,
+                "optimizer": request.optimizer,
+                "max_iterations": request.max_iterations,
+                "shots": request.shots,
+                "random_seed": request.random_seed,
+            }
         )
-        if not backend_available:
-            backend_label = "Qulacs" if request.backend == "qulacs" else "Qiskit SDK 2.x"
-            dependency_file = "requirements-quantum.txt" if request.backend == "qulacs" else "requirements-qiskit.txt"
+        if configuration_errors:
+            raise HTTPException(
+                status_code=422,
+                detail="Unsupported configuration for selected backend: "
+                + "; ".join(configuration_errors),
+            )
+        if not backend_registration.is_available():
             raise HTTPException(
                 status_code=503,
-                detail=f"{backend_label} is an optional dependency and is not installed on this API service; install {dependency_file}.",
+                detail=(
+                    f"{backend_registration.optional_dependency} is an optional dependency unavailable "
+                    "in this API environment; "
+                    f"install {backend_registration.dependency_requirements}."
+                ),
             )
         problem = synthetic_import_export_problem()
         formulation = formulate_import_export_qubo(problem)
@@ -203,14 +243,11 @@ def create_app(
             random_seed=request.random_seed,
             configuration={"example": request.example},
         )
-        solver = (
-            QulacsQAOASolver(config)
-            if request.backend == "qulacs"
-            else QiskitQAOASolver(config)
-        )
+        solver = backend_registration.solver_factory(config)
         result = solver.solve(solver_request)
 
         exact_energy = None
+        exact_feasible = None
         exact_elapsed = None
         gap = None
         if request.compare_exact:
@@ -226,6 +263,7 @@ def create_app(
                 )
             )
             exact_energy = exact_result.full_energy
+            exact_feasible = exact_result.feasible
             exact_elapsed = exact_result.execution_time_seconds
             if result.full_energy is not None and exact_energy != 0:
                 gap = float(
@@ -236,12 +274,7 @@ def create_app(
         return QuantumQAOAResponse(
             run_id=result.run_id,
             status=result.status.value,
-            backend_name=result.backend_name
-            or (
-                "Qulacs state-vector simulator"
-                if request.backend == "qulacs"
-                else "Qiskit StatevectorSampler local simulator"
-            ),
+            backend_name=result.backend_name or backend_registration.name,
             backend_id=request.backend,
             backend_version=result.backend_version,
             algorithm_name=result.algorithm_name or "QAOA",
@@ -274,11 +307,49 @@ def create_app(
                 QuantumSampleFrequency(bitstring="".join(map(str, bits)), count=count)
                 for bits, count in sorted(result.sample_frequencies.items())
             ],
+            sample_energies=[
+                QuantumSampleEnergy(
+                    bitstring="".join(map(str, bits)),
+                    count=record.frequency,
+                    qubo_energy=str(record.qubo_energy),
+                    full_energy=str(record.full_energy),
+                    ising_energy=str(record.ising_energy),
+                )
+                for bits, record in sorted(result.sample_energies.items())
+            ],
+            execution_metadata=(
+                QuantumExecutionMetadata(
+                    backend_id=result.execution_metadata.backend_id,
+                    backend_name=result.execution_metadata.backend_name,
+                    backend_version=result.execution_metadata.backend_version,
+                    execution_mode=result.execution_metadata.execution_mode.value,
+                    timing_scope=result.execution_metadata.timing_scope,
+                    timings=QuantumExecutionTimings(
+                        submission_seconds=result.execution_metadata.timings.submission_seconds,
+                        queue_seconds=result.execution_metadata.timings.queue_seconds,
+                        remote_execution_seconds=result.execution_metadata.timings.remote_execution_seconds,
+                        result_retrieval_seconds=result.execution_metadata.timings.result_retrieval_seconds,
+                    ),
+                    attributes=dict(result.execution_metadata.attributes),
+                )
+                if result.execution_metadata is not None
+                else None
+            ),
+            error_details=(
+                QuantumExecutionError(
+                    category=result.error_details.category.value,
+                    message=result.error_details.message,
+                    exception_type=result.error_details.exception_type,
+                )
+                if result.error_details is not None
+                else None
+            ),
             qubo_energy=_energy_text(result.qubo_energy),
             full_energy=_energy_text(result.full_energy),
             ising_energy=_energy_text(result.ising_energy),
             average_sampled_energy=_energy_text(result.average_sampled_energy),
             exact_reference_energy=_energy_text(exact_energy),
+            exact_reference_feasible=exact_feasible,
             exact_reference_time_seconds=exact_elapsed,
             energy_gap_percent=gap,
             feasible=result.feasible,

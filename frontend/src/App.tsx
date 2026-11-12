@@ -1685,17 +1685,62 @@ function Benchmarking({
   );
 }
 
+type QuantumIntegerRange = { min: number; max: number; valid: boolean };
+
+function quantumIntegerRange(
+  configuration: Record<string, unknown>,
+  key: string,
+  fallbackMin: number,
+  fallbackMax: number,
+): QuantumIntegerRange {
+  if (!(key in configuration)) {
+    return { min: fallbackMin, max: fallbackMax, valid: true };
+  }
+  const constraint = configuration[key];
+  if (!constraint || typeof constraint !== "object" || Array.isArray(constraint)) {
+    return { min: fallbackMin, max: fallbackMax, valid: false };
+  }
+  const { minimum, maximum } = constraint as { minimum?: unknown; maximum?: unknown };
+  const valid = Number.isSafeInteger(minimum) && Number.isSafeInteger(maximum) &&
+    (minimum as number) <= (maximum as number);
+  return valid
+    ? { min: minimum as number, max: maximum as number, valid: true }
+    : { min: fallbackMin, max: fallbackMax, valid: false };
+}
+
+function quantumStringChoices(
+  configuration: Record<string, unknown>,
+  key: string,
+  fallback: string[],
+): string[] {
+  if (!(key in configuration)) return fallback;
+  const constraint = configuration[key];
+  if (!constraint || typeof constraint !== "object" || Array.isArray(constraint)) return [];
+  const values = (constraint as { values?: unknown }).values;
+  if (!Array.isArray(values) || values.some((value) => typeof value !== "string")) return [];
+  return values.filter((value): value is "spsa" | "coordinate" =>
+    value === "spsa" || value === "coordinate",
+  );
+}
+
+function inRange(value: number, range: QuantumIntegerRange): boolean {
+  return Number.isSafeInteger(value) && value >= range.min && value <= range.max;
+}
+
+function clamp(value: number, range: QuantumIntegerRange): number {
+  return Math.min(range.max, Math.max(range.min, value));
+}
+
 function QuantumComputing({
   capabilities,
 }: {
   capabilities: Capabilities | null;
 }) {
   const integrations = capabilities?.integrations ?? [];
-  const qiskit = integrations.find((item) => item.id === "qiskit-qaoa");
-  const qulacs = integrations.find((item) => item.id === "qulacs-qaoa");
+  const quantumBackends = capabilities?.backends ?? [];
   const fujitsu = integrations.find((item) => item.id === "fujitsu-qarp");
   const [depth, setDepth] = useState(1);
-  const [backend, setBackend] = useState<"qulacs" | "qiskit">("qulacs");
+  const [backend, setBackend] = useState("");
   const [optimizer, setOptimizer] = useState<"spsa" | "coordinate">("spsa");
   const [iterations, setIterations] = useState(5);
   const [shots, setShots] = useState(128);
@@ -1703,12 +1748,44 @@ function QuantumComputing({
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState("");
   const [result, setResult] = useState<QuantumQAOAResult | null>(null);
-  const selectedCapability = backend === "qulacs" ? qulacs : qiskit;
-  const available = selectedCapability?.status === "available";
+  const selectedCapability = quantumBackends.find((item) => item.id === backend);
+  const configuration = selectedCapability?.supported_configuration ?? {};
+  const depthRange = quantumIntegerRange(configuration, "depth", 1, 3);
+  const iterationRange = quantumIntegerRange(configuration, "max_iterations", 1, 25);
+  const shotsRange = quantumIntegerRange(configuration, "shots", 16, 2048);
+  const seedRange = quantumIntegerRange(configuration, "random_seed", 0, 2147483647);
+  const optimizers = quantumStringChoices(configuration, "optimizer", ["spsa", "coordinate"]);
+  const backendName = selectedCapability?.name ?? "Quantum backend";
+  const available = selectedCapability?.available === true;
+  const backendStatus = selectedCapability?.status.replaceAll("_", " ") ?? "Not reported";
+  const configurationValid =
+    depthRange.valid && iterationRange.valid && shotsRange.valid && seedRange.valid &&
+    optimizers.length > 0 && optimizers.includes(optimizer) &&
+    inRange(depth, depthRange) && inRange(iterations, iterationRange) &&
+    inRange(shots, shotsRange) && inRange(seed, seedRange);
+
+  useEffect(() => {
+    if (!backend && quantumBackends.length > 0) {
+      setBackend(quantumBackends[0].id);
+    }
+  }, [backend, quantumBackends]);
+
+  useEffect(() => {
+    if (depthRange.valid) setDepth((value) => clamp(value, depthRange));
+    if (iterationRange.valid) setIterations((value) => clamp(value, iterationRange));
+    if (shotsRange.valid) setShots((value) => clamp(value, shotsRange));
+    if (seedRange.valid) setSeed((value) => clamp(value, seedRange));
+    if (optimizers.length > 0 && !optimizers.includes(optimizer)) {
+      setOptimizer(optimizers[0] as "spsa" | "coordinate");
+    }
+  }, [backend, depthRange.min, depthRange.max, depthRange.valid,
+    iterationRange.min, iterationRange.max, iterationRange.valid,
+    shotsRange.min, shotsRange.max, shotsRange.valid,
+    seedRange.min, seedRange.max, seedRange.valid, optimizers.join(",")]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!available || running) return;
+    if (!available || !configurationValid || running) return;
     setRunning(true);
     setRunError("");
     try {
@@ -1739,26 +1816,28 @@ function QuantumComputing({
       <div className={`quantum-callout ${available ? "quantum-callout-ready" : ""}`}>
         <span>✳</span>
         <div>
-          <strong>{available ? `${backend === "qiskit" ? "Qiskit" : "Qulacs"} simulator available` : `${backend === "qiskit" ? "Qiskit" : "Qulacs"} execution is unavailable`}</strong>
+          <strong>{available ? `${backendName} available` : `${backendName} is unavailable`}</strong>
           <p>
             {available
-              ? "Run a bounded QAOA experiment on the selected installed local state-vector simulator."
-              : `${backend === "qiskit" ? "Qiskit" : "Qulacs"} has not been detected by the API service; no simulation result will be fabricated.`}
+              ? `Run a bounded QAOA experiment using the ${selectedCapability?.execution_mode.replaceAll("_", " ")} backend.`
+              : selectedCapability
+                ? `${selectedCapability.optional_dependency} is unavailable in the API service; no result will be fabricated.`
+                : "No registered backend capability was reported by the API service."}
           </p>
         </div>
       </div>
       <div className="integration-grid">
         <Panel
           title="QAOA simulator availability"
-          subtitle="Select an installed optional local state-vector backend in the experiment workspace."
+          subtitle="Backend availability and supported inputs are reported by the QSupply API."
         >
           <div className="integration-status">
             <div className="integration-icon qiskit-icon">Q</div>
             <div>
               <Badge tone={available ? "good" : "warn"}>
-                {selectedCapability?.status.replaceAll("_", " ") ?? "Not reported"}
+                {backendStatus}
               </Badge>
-              <h3>{available ? `Ready for ${backend === "qiskit" ? "Qiskit" : "Qulacs"} simulation` : "Unavailable in API environment"}</h3>
+              <h3>{available ? `Ready for ${backendName}` : "Unavailable in API environment"}</h3>
               <p>
                 {selectedCapability?.description ?? "Backend availability has not been reported by the API."}
               </p>
@@ -1774,8 +1853,8 @@ function QuantumComputing({
               <Badge tone={available ? "good" : "warn"}>{available ? "Available" : "Unavailable"}</Badge>
             </div>
             <div>
-              <span>Qiskit adapter</span>
-              <Badge tone={qiskit?.status === "available" ? "good" : "warn"}>{qiskit?.status.replaceAll("_", " ") ?? "Not reported"}</Badge>
+              <span>Selected backend</span>
+              <Badge tone={available ? "good" : "warn"}>{backendStatus}</Badge>
             </div>
           </div>
         </Panel>
@@ -1809,58 +1888,60 @@ function QuantumComputing({
       </div>
       <Panel
         title="QAOA experiment workspace"
-        subtitle="Run QAOA on the selected local simulator using the labelled five-variable synthetic import-export example."
+        subtitle="Run QAOA using a registered backend and the labelled five-variable synthetic import-export example."
         className="quantum-workspace-panel"
       >
         <div className="quantum-run-grid">
           <form className="quantum-run-form" onSubmit={submit}>
             <div className="quantum-control-grid">
               <label>
-                Simulator backend
-                <select value={backend} onChange={(event) => setBackend(event.target.value as "qulacs" | "qiskit")} disabled={running}>
-                  <option value="qulacs">Qulacs</option>
-                  <option value="qiskit">Qiskit StatevectorSampler</option>
+                Quantum backend
+                <select value={selectedCapability ? backend : ""} onChange={(event) => setBackend(event.target.value)} disabled={running || quantumBackends.length === 0}>
+                  {!selectedCapability && <option value="" disabled>{quantumBackends.length === 0 ? "No registered backends" : "Select a registered backend"}</option>}
+                  {quantumBackends.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}{item.available ? "" : " (unavailable)"}
+                    </option>
+                  ))}
                 </select>
                 <small>{selectedCapability?.description ?? "Backend availability has not been reported by the API."}</small>
               </label>
               <label>
                 Circuit depth p
-                <select value={depth} onChange={(event) => setDepth(Number(event.target.value))} disabled={!available || running}>
-                  {[1, 2, 3].map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
+                <input type="number" min={depthRange.min} max={depthRange.max} step={1} value={depth} onChange={(event) => setDepth(Number(event.target.value))} disabled={!available || !depthRange.valid || running} />
                 <small>Number of cost and mixer layer pairs.</small>
               </label>
               <label>
                 Optimizer
-                <select value={optimizer} onChange={(event) => setOptimizer(event.target.value as "spsa" | "coordinate")} disabled={!available || running}>
-                  <option value="spsa">SPSA</option>
-                  <option value="coordinate">Coordinate search</option>
+                <select value={optimizer} onChange={(event) => setOptimizer(event.target.value as "spsa" | "coordinate")} disabled={!available || optimizers.length === 0 || running}>
+                  {optimizers.map((value) => (
+                    <option key={value} value={value}>{value === "spsa" ? "SPSA" : "Coordinate search"}</option>
+                  ))}
                 </select>
                 <small>Classical method that tunes QAOA angles.</small>
               </label>
               <label>
                 Iteration limit
-                <input type="number" min={1} max={25} value={iterations} onChange={(event) => setIterations(Number(event.target.value))} disabled={!available || running} />
-                <small>Maximum optimizer updates (1–25).</small>
+                <input type="number" min={iterationRange.min} max={iterationRange.max} step={1} value={iterations} onChange={(event) => setIterations(Number(event.target.value))} disabled={!available || !iterationRange.valid || running} />
+                <small>Maximum optimizer updates ({iterationRange.min}–{iterationRange.max}).</small>
               </label>
               <label>
                 Shots per evaluation
-                <select value={shots} onChange={(event) => setShots(Number(event.target.value))} disabled={!available || running}>
-                  {[16, 32, 64, 128, 256, 512, 1024, 2048].map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
+                <input type="number" min={shotsRange.min} max={shotsRange.max} step={1} value={shots} onChange={(event) => setShots(Number(event.target.value))} disabled={!available || !shotsRange.valid || running} />
                 <small>Measurements used to estimate each energy.</small>
               </label>
               <label className="quantum-seed-control">
                 Random seed
-                <input type="number" min={0} max={2147483647} value={seed} onChange={(event) => setSeed(Number(event.target.value))} disabled={!available || running} />
+                <input type="number" min={seedRange.min} max={seedRange.max} step={1} value={seed} onChange={(event) => setSeed(Number(event.target.value))} disabled={!available || !seedRange.valid || running} />
                 <small>Controls parameter initialization and simulator sampling.</small>
               </label>
             </div>
             {runError && <div className="quantum-run-error" role="alert">{runError}</div>}
-            <button className="primary-button quantum-run-button" type="submit" disabled={!available || running}>
-              {running ? `Executing QAOA on ${backend === "qiskit" ? "Qiskit" : "Qulacs"}…` : "Run QAOA experiment"}
+            <button className="primary-button quantum-run-button" type="submit" disabled={!available || !configurationValid || running}>
+              {running ? `Executing QAOA on ${backendName}…` : "Run QAOA experiment"}
             </button>
-            {!available && <p className="quantum-unavailable-note">Install `{backend === "qiskit" ? "requirements-qiskit.txt" : "requirements-quantum.txt"}` in the API environment to enable this action.</p>}
+            {!available && selectedCapability && <p className="quantum-unavailable-note">Install `{selectedCapability.dependency_requirements}` in the API environment to enable this action.</p>}
+            {available && !configurationValid && <p className="quantum-unavailable-note" role="alert">The selected backend did not report a valid supported configuration for these settings.</p>}
           </form>
           <div className="quantum-result-area" aria-live="polite">
             {!result && !running && (

@@ -6,7 +6,9 @@ from unittest.mock import patch
 from qsupply import (
     IsingModel,
     QAOAConfig,
+    QAOASamplingBackend,
     QUBO,
+    SamplingRequest,
     SolverRequest,
     benchmark_qaoa_backends,
     qubo_to_ising,
@@ -26,6 +28,9 @@ from qsupply.solver import ExecutionStatus, ProblemRepresentation
 
 
 class TestQiskitCountDecoding(unittest.TestCase):
+    def test_qiskit_adapter_implements_sampling_protocol_without_loading_sdk(self):
+        self.assertIsInstance(QiskitBackend(), QAOASamplingBackend)
+
     def test_single_and_multi_qubit_register_order(self):
         self.assertEqual(decode_qiskit_counts({"1": 3, "0": 1}, 1), {(1,): 3, (0,): 1})
         self.assertEqual(
@@ -56,11 +61,38 @@ class TestQiskitCountDecoding(unittest.TestCase):
             result = solver.solve(request)
         self.assertEqual(result.status, ExecutionStatus.FAILED)
         self.assertIn("Qiskit SDK 2.x is an optional dependency", result.error)
+        self.assertEqual(
+            result.error_details.category.value, "unavailable_dependency"
+        )
         self.assertIsNone(result.best_binary_assignment)
 
 
 @unittest.skipUnless(QiskitBackend.is_available(), "optional Qiskit SDK not installed")
 class TestQiskitIntegration(unittest.TestCase):
+    def test_zero_cost_circuit_returns_only_bindable_parameters(self):
+        ising = IsingModel(("x",), 0, {"x": 0}, {})
+        circuit, (gammas, betas) = build_qiskit_qaoa_circuit(ising, 2)
+
+        self.assertEqual(gammas, ())
+        self.assertEqual(len(betas), 2)
+        self.assertEqual(set((*gammas, *betas)), set(circuit.parameters))
+        bound = circuit.assign_parameters(
+            {parameter: 0.2 for parameter in (*gammas, *betas)}
+        )
+        self.assertEqual(bound.parameters, set())
+
+    def test_nonzero_cost_circuit_returns_all_bindable_parameters(self):
+        ising = IsingModel(("x",), 7, {"x": Fraction(3, 2)}, {})
+        circuit, (gammas, betas) = build_qiskit_qaoa_circuit(ising, 2)
+
+        self.assertEqual(tuple(map(str, gammas)), ("gamma[0]", "gamma[1]"))
+        self.assertEqual(tuple(map(str, betas)), ("beta[0]", "beta[1]"))
+        self.assertEqual(set((*gammas, *betas)), set(circuit.parameters))
+        bound = circuit.assign_parameters(
+            {parameter: 0.2 for parameter in (*gammas, *betas)}
+        )
+        self.assertEqual(bound.parameters, set())
+
     def test_parameterized_circuit_uses_canonical_rotations_and_register_order(self):
         import numpy as np
 
@@ -112,6 +144,21 @@ class TestQiskitIntegration(unittest.TestCase):
         self.assertEqual(first.counts, second.counts)
         self.assertEqual(first.shots, 64)
         self.assertTrue(all(len(bits) == 3 for bits in first.counts))
+
+    def test_formal_sampling_request_returns_identity_and_canonical_order(self):
+        ising = IsingModel(("v2", "v0", "v1"), 0, {"v2": 0, "v0": 0, "v1": 0}, {})
+        request = SamplingRequest(ising, (0.4,), (0.2,), 32, 771)
+        batch = QiskitBackend().sample(request)
+        self.assertEqual(batch.backend_id, "qiskit-statevector-sampler")
+        self.assertIn("Qiskit", batch.backend_name)
+        self.assertIsNotNone(batch.backend_version)
+        self.assertEqual(batch.variable_order, ising.variables)
+        self.assertEqual(batch.requested_shots, 32)
+        self.assertEqual(batch.seed, 771)
+        self.assertEqual(batch.shots, 32)
+        self.assertTrue(all(len(bits) == 3 for bits in batch.counts))
+        self.assertIn("excludes Qiskit SDK loading", batch.execution_metadata["timing_scope"])
+        self.assertIn("parameter binding", batch.execution_metadata["timing_scope"])
 
     def test_solver_recomputes_qubo_ising_and_full_energy_and_validates_plan(self):
         problem = synthetic_import_export_problem()

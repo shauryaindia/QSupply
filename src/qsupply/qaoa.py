@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fractions import Fraction
 from math import isfinite, pi
 from numbers import Real
 from random import Random
 from time import perf_counter
 from types import MappingProxyType
+from typing import Protocol, runtime_checkable
 
+from .execution import ExecutionMetadata
 from .ising import IsingModel
+from .qubo import QUBO
+from .solver import (
+    ProblemRepresentation,
+    SampleEnergyRecord,
+    SolverRequest,
+    average_recomputed_full_energy,
+    recompute_sample_energies,
+)
 
 
 MAX_QAOA_VARIABLES = 12
@@ -64,11 +74,65 @@ class CircuitOperation:
 
 
 @dataclass(frozen=True)
+class SamplingRequest:
+    """One backend-neutral QAOA sampling request.
+
+    Sample indices always follow ``ising_model.variables``. ``seed`` is a
+    requested seed passed to the backend; it does not promise reproducibility
+    unless that backend documents and honors seeded sampling.
+    """
+
+    ising_model: IsingModel
+    gammas: tuple[float, ...]
+    betas: tuple[float, ...]
+    shots: int
+    seed: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.ising_model, IsingModel):
+            raise TypeError("ising_model must be an IsingModel")
+        if not isinstance(self.gammas, tuple) or not isinstance(self.betas, tuple):
+            raise TypeError("gammas and betas must be tuples")
+        if not self.gammas or len(self.gammas) != len(self.betas):
+            raise ValueError("gammas and betas must have equal nonzero depth")
+        if any(
+            isinstance(angle, bool) or not isinstance(angle, Real) or not isfinite(angle)
+            for angle in (*self.gammas, *self.betas)
+        ):
+            raise ValueError("gamma and beta values must be finite real numbers")
+        if isinstance(self.shots, bool) or not isinstance(self.shots, int) or self.shots <= 0:
+            raise ValueError("shots must be a positive integer")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int):
+            raise TypeError("seed must be an integer")
+
+    @property
+    def variable_order(self) -> tuple[str, ...]:
+        """Canonical ordering required for every returned bit tuple."""
+        return self.ising_model.variables
+
+
+@dataclass(frozen=True)
 class SampleBatch:
-    """Counted binary samples in variable order and backend sampling duration."""
+    """Counted binary samples in variable order and backend call metadata.
+
+    Identity and request metadata are optional for compatibility with legacy
+    sampling callbacks. Implementations of :class:`QAOASamplingBackend` should
+    populate them. ``shots`` is the actual count total; ``requested_shots``
+    records the requested budget and may differ if a backend reports a partial
+    result.
+    """
 
     counts: Mapping[tuple[int, ...], int]
     execution_time_seconds: float
+    variable_order: tuple[str, ...] | None = None
+    backend_id: str | None = None
+    backend_name: str | None = None
+    backend_version: str | None = None
+    requested_shots: int | None = None
+    seed: int | None = None
+    execution_metadata: Mapping[str, object] | ExecutionMetadata = field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.counts, Mapping) or not self.counts:
@@ -91,7 +155,52 @@ class SampleBatch:
             normalized[bit_tuple] = count
         if not isfinite(self.execution_time_seconds) or self.execution_time_seconds < 0:
             raise ValueError("execution_time_seconds must be finite and non-negative")
+        if self.variable_order is not None:
+            order = tuple(self.variable_order)
+            if (
+                any(not isinstance(name, str) or not name for name in order)
+                or len(set(order)) != len(order)
+            ):
+                raise ValueError("variable_order must contain unique non-empty names")
+            if len(order) != width:
+                raise ValueError("variable_order width must match sampled bitstrings")
+            object.__setattr__(self, "variable_order", order)
+        for name in ("backend_id", "backend_name", "backend_version"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{name} must be a non-empty string or None")
+        if self.requested_shots is not None and (
+            isinstance(self.requested_shots, bool)
+            or not isinstance(self.requested_shots, int)
+            or self.requested_shots <= 0
+        ):
+            raise ValueError("requested_shots must be a positive integer or None")
+        if self.seed is not None and (
+            isinstance(self.seed, bool) or not isinstance(self.seed, int)
+        ):
+            raise TypeError("seed must be an integer or None")
+        if isinstance(self.execution_metadata, ExecutionMetadata):
+            structured_metadata = self.execution_metadata
+            if (
+                structured_metadata.backend_id != self.backend_id
+                or structured_metadata.backend_name != self.backend_name
+                or structured_metadata.backend_version != self.backend_version
+            ):
+                raise ValueError("structured execution identity must match sample batch identity")
+        elif isinstance(self.execution_metadata, Mapping):
+            object.__setattr__(
+                self, "execution_metadata", MappingProxyType(dict(self.execution_metadata))
+            )
+        else:
+            raise TypeError("execution_metadata must be a mapping or ExecutionMetadata")
         object.__setattr__(self, "counts", MappingProxyType(normalized))
+
+    @property
+    def structured_execution_metadata(self) -> ExecutionMetadata | None:
+        """Return structured metadata, or None for a legacy mapping response."""
+        if isinstance(self.execution_metadata, ExecutionMetadata):
+            return self.execution_metadata
+        return None
 
     @property
     def shots(self) -> int:
@@ -113,11 +222,31 @@ class QAOAExecution:
     best_bits: tuple[int, ...]
     best_sample_frequency: int
     cost_normalization_scale: Real
+    sample_energies: Mapping[tuple[int, ...], SampleEnergyRecord] = field(
+        default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "sample_energies", MappingProxyType(dict(self.sample_energies))
+        )
 
 
 SampleFunction = Callable[
     [IsingModel, tuple[float, ...], tuple[float, ...], int, int], SampleBatch
 ]
+
+
+@runtime_checkable
+class QAOASamplingBackend(Protocol):
+    """Backend contract for sampling one canonical QAOA request.
+
+    Implementations return bit tuples in ``request.variable_order`` and report
+    backend identity, requested shots, seed and sample-call duration. A seed is
+    an input request, not a reproducibility guarantee.
+    """
+
+    def sample(self, request: SamplingRequest, /) -> SampleBatch: ...
 
 
 def build_qaoa_circuit_plan(
@@ -179,8 +308,11 @@ def build_qaoa_circuit_plan(
 
 def run_qaoa(
     ising: IsingModel,
-    sample: SampleFunction,
+    sample: SampleFunction | QAOASamplingBackend,
     config: QAOAConfig,
+    *,
+    source_qubo: QUBO | None = None,
+    constant_offset: Real = 0,
 ) -> QAOAExecution:
     """Optimize QAOA parameters through a backend sampling callback.
 
@@ -193,8 +325,8 @@ def run_qaoa(
         raise TypeError("ising must be an IsingModel")
     if not isinstance(config, QAOAConfig):
         raise TypeError("config must be a QAOAConfig")
-    if not callable(sample):
-        raise TypeError("sample must be callable")
+    if not isinstance(sample, QAOASamplingBackend) and not callable(sample):
+        raise TypeError("sample must be a QAOASamplingBackend or legacy callable")
     if not ising.variables:
         raise ValueError("QAOA requires at least one variable")
     if len(ising.variables) > config.max_variables:
@@ -202,6 +334,16 @@ def run_qaoa(
             f"QAOA supports at most {config.max_variables} variables; "
             f"received {len(ising.variables)}"
         )
+    energy_request: SolverRequest | None = None
+    if source_qubo is not None:
+        energy_request = SolverRequest(
+            qubo=source_qubo,
+            constant_offset=constant_offset,
+            representation=ProblemRepresentation.ISING,
+            ising_model=ising,
+        )
+    elif constant_offset != 0:
+        raise ValueError("constant_offset requires source_qubo for independent energy checks")
 
     rng = Random(config.random_seed)
     depth = config.depth
@@ -213,17 +355,42 @@ def run_qaoa(
     execution_seconds = 0.0
     optimizer_samples = 0
 
-    def evaluate(candidate: list[float]) -> float:
-        nonlocal execution_seconds, optimizer_samples
-        gammas = tuple(candidate[:depth])
-        betas = tuple(candidate[depth:])
-        batch = sample(
-            ising, gammas, betas, config.shots, rng.randrange(0, 2**31)
-        )
+    def take_sample(gammas: tuple[float, ...], betas: tuple[float, ...]) -> SampleBatch:
+        seed = rng.randrange(0, 2**31)
+        if isinstance(sample, QAOASamplingBackend):
+            sampling_request = SamplingRequest(
+                ising_model=ising,
+                gammas=gammas,
+                betas=betas,
+                shots=config.shots,
+                seed=seed,
+            )
+            batch = sample.sample(sampling_request)
+            if not isinstance(batch, SampleBatch):
+                raise TypeError("sampling backend must return SampleBatch")
+            if batch.structured_execution_metadata is None:
+                raise ValueError("sampling backend response must include structured execution metadata")
+            if batch.backend_id is None or batch.backend_name is None:
+                raise ValueError("sampling backend response must identify its backend")
+            if batch.variable_order != sampling_request.variable_order:
+                raise ValueError("sampling backend response variable_order mismatch")
+            if batch.requested_shots != sampling_request.shots:
+                raise ValueError("sampling backend response requested_shots mismatch")
+            if batch.seed != sampling_request.seed:
+                raise ValueError("sampling backend response seed mismatch")
+        else:
+            batch = sample(ising, gammas, betas, config.shots, seed)
         if not isinstance(batch, SampleBatch):
             raise TypeError("sampling backend must return SampleBatch")
         if any(len(bits) != len(ising.variables) for bits in batch.counts):
             raise ValueError("backend sample width does not match Ising variable count")
+        return batch
+
+    def evaluate(candidate: list[float]) -> float:
+        nonlocal execution_seconds, optimizer_samples
+        gammas = tuple(candidate[:depth])
+        betas = tuple(candidate[depth:])
+        batch = take_sample(gammas, betas)
         execution_seconds += batch.execution_time_seconds
         optimizer_samples += batch.shots
         return _average_scaled_energy(ising, batch.counts, cost_scale)
@@ -267,19 +434,20 @@ def run_qaoa(
                 best_params, best_energy = list(current), current_energy
 
     optimization_seconds = perf_counter() - optimization_started
-    final_samples = sample(
-        ising,
-        tuple(best_params[:depth]),
-        tuple(best_params[depth:]),
-        config.shots,
-        rng.randrange(0, 2**31),
+    final_samples = take_sample(
+        tuple(best_params[:depth]), tuple(best_params[depth:])
     )
-    if not isinstance(final_samples, SampleBatch):
-        raise TypeError("sampling backend must return SampleBatch")
-    if any(len(bits) != len(ising.variables) for bits in final_samples.counts):
-        raise ValueError("backend sample width does not match Ising variable count")
     execution_seconds += final_samples.execution_time_seconds
-    average = _average_energy(ising, final_samples.counts)
+    sample_energies = (
+        recompute_sample_energies(energy_request, final_samples.counts)
+        if energy_request is not None
+        else MappingProxyType({})
+    )
+    average = (
+        average_recomputed_full_energy(sample_energies)
+        if sample_energies
+        else _average_energy(ising, final_samples.counts)
+    )
     scored = [
         (ising.energy(_spins(ising, bits)), bits, count)
         for bits, count in final_samples.counts.items()
@@ -301,6 +469,7 @@ def run_qaoa(
         best_bits=best_bits,
         best_sample_frequency=best_frequency,
         cost_normalization_scale=cost_scale,
+        sample_energies=sample_energies,
     )
 
 

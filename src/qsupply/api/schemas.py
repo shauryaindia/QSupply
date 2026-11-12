@@ -5,7 +5,7 @@ from enum import Enum
 from math import isfinite
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
 
 class SolverId(str, Enum):
@@ -28,11 +28,27 @@ class CapabilityStatus(BaseModel):
     description: str
 
 
+class QuantumBackendCapability(BaseModel):
+    id: str
+    name: str
+    description: str
+    available: bool
+    status: str
+    supported_representations: list[str]
+    backend_type: str
+    execution_mode: str
+    optional_dependency: str
+    dependency_requirements: str
+    version: str | None
+    supported_configuration: dict[str, Any]
+
+
 class CapabilitiesResponse(BaseModel):
     solvers: list[SolverCapability]
     features: list[CapabilityStatus]
     integrations: list[CapabilityStatus]
     exact_cvrp_customer_limit: int
+    backends: list[QuantumBackendCapability] = Field(default_factory=list)
 
 
 class RunCreateRequest(BaseModel):
@@ -83,7 +99,7 @@ class QuantumQAOARequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     example: Literal["synthetic-import-export"] = "synthetic-import-export"
-    backend: Literal["qulacs", "qiskit"] = "qulacs"
+    backend: StrictStr = Field(default="qulacs", min_length=1)
     depth: StrictInt = Field(default=1, ge=1, le=3)
     optimizer: Literal["spsa", "coordinate"] = "spsa"
     max_iterations: StrictInt = Field(default=5, ge=1, le=25)
@@ -97,11 +113,42 @@ class QuantumSampleFrequency(BaseModel):
     count: int
 
 
+class QuantumSampleEnergy(BaseModel):
+    bitstring: str
+    count: int
+    qubo_energy: str
+    full_energy: str
+    ising_energy: str
+
+
+class QuantumExecutionTimings(BaseModel):
+    submission_seconds: float | None = None
+    queue_seconds: float | None = None
+    remote_execution_seconds: float | None = None
+    result_retrieval_seconds: float | None = None
+
+
+class QuantumExecutionMetadata(BaseModel):
+    backend_id: str
+    backend_name: str
+    backend_version: str | None
+    execution_mode: str
+    timing_scope: str | None
+    timings: QuantumExecutionTimings
+    attributes: dict[str, object] = Field(default_factory=dict)
+
+
+class QuantumExecutionError(BaseModel):
+    category: str
+    message: str
+    exception_type: str | None
+
+
 class QuantumQAOAResponse(BaseModel):
     run_id: str
     status: str
     backend_name: str
-    backend_id: Literal["qulacs", "qiskit"]
+    backend_id: str
     backend_version: str | None
     algorithm_name: str
     algorithm_version: str
@@ -121,11 +168,15 @@ class QuantumQAOAResponse(BaseModel):
     best_spin_assignment: dict[str, int] | None
     best_sample_frequency: int | None
     sample_frequencies: list[QuantumSampleFrequency]
+    sample_energies: list[QuantumSampleEnergy] = Field(default_factory=list)
+    execution_metadata: QuantumExecutionMetadata | None = None
+    error_details: QuantumExecutionError | None = None
     qubo_energy: str | None
     full_energy: str | None
     ising_energy: str | None
     average_sampled_energy: str | None
     exact_reference_energy: str | None
+    exact_reference_feasible: bool | None = None
     exact_reference_time_seconds: float | None
     energy_gap_percent: float | None
     feasible: bool | None

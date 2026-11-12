@@ -44,13 +44,18 @@ class TestQSupplyAPI(unittest.TestCase):
         integrations = {
             feature["id"]: feature["status"] for feature in capabilities["integrations"]
         }
+        def expected_backend_status(available, version):
+            if available:
+                return "available"
+            return "unsupported_dependency_version" if version is not None else "optional_dependency_missing"
+
         self.assertEqual(
             integrations["qiskit-qaoa"],
-            "available" if QiskitBackend.is_available() else "optional_dependency_missing",
+            expected_backend_status(QiskitBackend.is_available(), QiskitBackend.version()),
         )
         self.assertEqual(
             integrations["qulacs-qaoa"],
-            "available" if QulacsBackend.is_available() else "optional_dependency_missing",
+            expected_backend_status(QulacsBackend.is_available(), QulacsBackend.version()),
         )
         self.assertEqual(integrations["fujitsu-qarp"], "not_configured_or_verified")
         instances = self.client.get("/api/v1/instances").json()
