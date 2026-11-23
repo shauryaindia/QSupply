@@ -1,57 +1,54 @@
-<img width="501" height="501" alt="QSupply Logo" src="https://github.com/user-attachments/assets/9b2c32df-9456-4ea1-b8ae-f8d3fde0ea1c" />
-
+ <img width="501" height="501" alt="QSupply Logo" src="https://github.com/user-attachments/assets/9b2c32df-9456-4ea1-b8ae-f8d3fde0ea1c" />
 
 # QSupply
 
-QSupply is an enterprise optimization platform under active development, designed to model, solve, and benchmark complex optimization problems using mathematical optimization, heuristics, metaheuristics, and emerging hybrid quantum-classical approaches.
+**Enterprise Optimization Platform | Classical, Heuristic & Hybrid Quantum-Classical Optimization**
 
-The initial focus is supply chain, logistics, manufacturing, and scheduling optimization, with a long-term vision of supporting enterprise decision intelligence across industries.
+🌐 **Live Application:** [https://qsupply.macrovisionai.com/](https://qsupply.macrovisionai.com/)
 
-> **QSupply is product developed and maintained by MacroVision AI Pvt. Ltd.**
+QSupply is an enterprise optimization platform developed by MacroVision AI Pvt. Ltd. It is designed to model, solve, evaluate and benchmark complex optimization problems using mathematical optimization, classical algorithms, heuristics, metaheuristics and emerging hybrid quantum-classical approaches.
+
+With an initial focus on supply chains, logistics and manufacturing, QSupply aims to help enterprises make better operational decisions through solver-agnostic optimization and benchmark-driven evaluation.
+
+> **A product developed and maintained by MacroVision AI Pvt. Ltd.**
+
+---
 
 ## Vision
 
-Build a modern optimization platform that enables enterprises and researchers to model, benchmark, and solve real-world optimization problems using the most appropriate computational approach—whether classical, heuristic, metaheuristic, hybrid, or quantum.
-
----
+Build a modern optimization platform that enables enterprises and researchers to model, benchmark and solve complex optimization problems using the most appropriate computational approach—whether classical, heuristic, metaheuristic, hybrid or quantum.
 
 ## Why QSupply?
 
-Modern enterprises face increasingly complex optimization challenges across supply chains, logistics, manufacturing, scheduling, and resource planning. Selecting the right optimization approach is often as important as solving the problem itself.
+Modern enterprises face increasingly complex optimization challenges across supply chains, logistics, manufacturing, scheduling and resource planning. Selecting the right optimization approach is often as important as solving the problem itself.
 
-QSupply aims to provide a unified platform for modeling, benchmarking, and solving enterprise optimization problems using mathematical optimization, heuristics, metaheuristics, and emerging hybrid quantum-classical techniques.
+QSupply brings together Operations Research, Artificial Intelligence and Quantum Computing through a unified, solver-agnostic architecture.
 
-Rather than assuming any single optimization paradigm is universally superior, QSupply is built on a solver-agnostic philosophy—benchmarking multiple approaches and applying the most appropriate computational method for each problem.
-
-Our vision is to bridge Operations Research, Artificial Intelligence, and Quantum Computing to enable the next generation of enterprise decision intelligence.
+Rather than assuming any single optimization paradigm is universally superior, QSupply aims to benchmark multiple approaches and apply the most appropriate computational method for each problem.
 
 ---
 
-## Planned Capabilities
+## Platform Capabilities
 
 ### Optimization Framework
-
 - Mathematical Optimization
 - Constraint Optimization
 - Multi-objective Optimization
-- Optimization Modeling
+- Optimization Modelling
 
 ### Optimization Engines
-
 - Classical Optimization
 - Heuristic Optimization
 - Metaheuristic Optimization
 - Hybrid Quantum-Classical Optimization
 
 ### Benchmarking & Evaluation
-
 - Solver Benchmarking
 - Performance Analysis
-- Standard Optimization Datasets
+- Optimization Reference Solvers
 - Classical vs Hybrid Benchmarking
 
 ### Enterprise Optimization
-
 - Supply Chain Optimization
 - Logistics & Vehicle Routing
 - Production Scheduling
@@ -60,221 +57,284 @@ Our vision is to bridge Operations Research, Artificial Intelligence, and Quantu
 - Resource Allocation
 
 ### Quantum Optimization
-
-- General-purpose QUBO Problem Builder
+- QUBO Modelling and Energy Evaluation
+- QUBO-to-Ising Conversion
 - QAOA Workflows
-- Quantum Solver Integrations
+- Backend-Neutral Quantum Solver Architecture
+- Optional Qiskit and Qulacs Integrations
+
 ---
 
-## Planned Framework Integrations
+## Framework Integrations
 
-The following framework integrations remain planned; their presence here does
-not indicate current support:
+### Implemented Integrations
+
+| Framework / Component | Status | Description |
+|---|---|---|
+| Qiskit | Implemented | Optional local StatevectorSampler backend |
+| Qulacs | Implemented | Optional local CPU statevector simulator |
+| FastAPI | Implemented | Backend API |
+| React + TypeScript | Implemented | Web application interface |
+
+Qiskit and Qulacs currently provide local classical statevector simulation. These integrations do not represent execution on quantum hardware.
+
+### Planned Integrations
 
 - OR-Tools
 - Pyomo
 - PuLP
-- Qiskit
 - PennyLane
-- NumPy
-- SciPy
+- Additional optimization and scientific computing frameworks
 
-Qulacs is implemented as an optional local simulator integration for the bounded
-QAOA workflow described below. It is not a hosted quantum service.
+The presence of a framework in this section does not indicate an existing integration.
+
+---
+
+## Architecture & Design Principles
+
+- Solver-agnostic architecture
+- Backend-neutral solver interfaces
+- Benchmark-driven optimization
+- Modular and extensible design
+- Enterprise-first engineering
+- Classical and quantum-classical interoperability
+- Independent feasibility validation
+- Reproducible optimization experiments
+
+---
+
+## Current Development Status
+
+**QSupply is available as a live web application and remains under active development.**
+
+The current platform includes:
+
+- Enterprise optimization dashboard and Control Tower.
+- Classical optimization models and solver interfaces.
+- CVRP heuristic and exact reference solvers.
+- Optimization benchmarking and evaluation.
+- Global multimodal network and disruption-recovery demonstrations using synthetic data.
+- QUBO modelling and energy evaluation.
+- Canonical QUBO-to-Ising conversion.
+- Backend-neutral QAOA architecture.
+- Optional Qiskit StatevectorSampler and Qulacs CPU statevector integrations.
+- Quantum experiment configuration and backend capability discovery.
+- Quantum execution metadata, sample evaluation and feasibility validation.
+- CSV and PDF reporting for supported dashboard workflows.
+
+**Live Application:** [https://qsupply.macrovisionai.com/](https://qsupply.macrovisionai.com/)
+
+Production data integrations, Fujitsu QARP execution and demonstrated quantum advantage have not yet been established.
+
+---
+
+## Implemented Functionality
+
+### 1. QUBO Energy Evaluation
+
+The repository includes a Python `QUBO` model for named binary variables. It evaluates:
+
+`E(x) = Σ Q[i,j] × x[i] × x[j]`
+
+The implementation validates complete assignments and reports errors for missing, unknown or non-binary values. Boolean assignments (`False`/`True`) are also accepted as 0/1.
+
+See [`src/README.md`](src/README.md) for usage examples and tests.
+
+### 2. Import-Export QUBO Formulation
+
+The dependency-free import-export module formulates shipment-option choices, delay/time/carbon costs, exactly-one selection penalties and shared integer lane capacities as a QUBO.
+
+The constant offset is retained separately. Decoding, original-data feasibility checks and business-cost evaluation are provided independently of QUBO penalty energy.
+
+A small synthetic example uses exhaustive enumeration to verify the formulation. This is not a general-purpose solver.
+
+### 3. QUBO-to-Ising Conversion
+
+`qubo_to_ising` converts the named QUBO model into an Ising Hamiltonian:
+
+`E(z) = C + Σ h[i] z[i] + Σ J[i,j] z[i] z[j]`
+
+Using the convention:
+
+`z[i] = 1 - 2*x[i]`
+
+The conversion:
+- Preserves declared variable and register order.
+- Combines supplied ordered-pair coefficients for each unordered pair.
+- Supports a separate constant offset.
+- Preserves exact integer and rational arithmetic where supported.
+
+See [`src/README.md`](src/README.md#qubo-to-ising-conversion).
+
+### 4. Backend-Neutral Solver Architecture
+
+QSupply includes a common solver interface and deterministic `ExactQUBOSolver` for small QUBO problems.
+
+The exact solver supports up to 12 variables by default (4,096 assignments). It is intended as a classical reference for small problems, not a scalable optimizer.
+
+Results distinguish QUBO energy, full energy, Ising energy, domain feasibility and optional business objectives.
+
+### 5. Hybrid Quantum-Classical Optimization and QAOA
+
+QSupply includes a backend-neutral QAOA circuit plan and optional Qiskit and Qulacs execution adapters.
+
+The workflow:
+- Converts QUBO models into Ising Hamiltonians.
+- Constructs parameterized QAOA circuits.
+- Prepares an initial equal-superposition state.
+- Applies cost and mixer operations.
+- Optimizes circuit parameters using supported optimization methods.
+- Samples the resulting state.
+- Rescores sampled bitstrings against the original QUBO and constant offset.
+- Validates domain feasibility independently.
+
+**Supported optional backends:**
+
+- **Qiskit:** Local StatevectorSampler execution.
+- **Qulacs:** Local CPU statevector simulation.
+
+Backend-specific configuration capabilities are exposed through the solver architecture and API.
+
+These integrations currently perform classical statevector simulation. They are not quantum hardware execution, do not establish a performance advantage and should not be interpreted as evidence of quantum advantage.
+
+Fujitsu QARP remains unimplemented and unverified.
+
+Install the relevant optional dependencies using `requirements-qiskit.txt` or `requirements-quantum.txt`.
+
+See [`src/README.md`](src/README.md#optional-qaoa-backends).
+
+### 6. CVRP Route Optimization
+
+The `CVRPProblem` model represents:
+- A single depot.
+- Customer demands.
+- Vehicle capacities.
+- A complete distance matrix.
+
+The dependency-free `NearestNeighborTwoOptSolver` constructs capacity-feasible routes and applies 2-opt local search.
+
+A synthetic five-customer, two-vehicle example is available in [`examples/cvrp_synthetic.py`](examples/cvrp_synthetic.py).
+
+This is a heuristic and is not guaranteed to find a globally optimal solution.
+
+### 7. CVRP Benchmarking
+
+The benchmarking engine compares:
+- Nearest-neighbour seed solutions.
+- 2-opt-improved routes.
+- Exact reference solutions.
+
+It evaluates seeded synthetic instances with 5, 7 and 9 customers.
+
+The exact subset dynamic-programming solver is capped at 10 customers because of exponential time and memory growth.
+
+Results include routes, distance, feasibility, vehicles used, wall-clock time and heuristic optimality gap.
+
+Benchmark results are based on synthetic instances and should not be interpreted as real-world performance guarantees.
+
+See [`benchmarks/README.md`](benchmarks/README.md).
+
+### 8. Global Multimodal Network & Disruption Recovery
+
+The global optimization workspace uses a deterministic synthetic network and shipment dataset to generate bounded candidate routes.
+
+It supports:
+- Multimodal route comparison.
+- Baseline assignment evaluation.
+- Simulated corridor disruptions.
+- Recovery feasibility analysis.
+- Configurable route rankings.
+- Per-mode carbon breakdowns.
+- Custom disruption scenarios.
+- Saved optimization runs.
+- CSV and PDF reports.
+
+The synthetic data catalog covers 74 locations and 122 directed links across major trade regions, with six runnable international and domestic demonstration scenarios.
+
+Custom scenarios support closures, unavailable locations, capacity reductions, freight/time multipliers and additive transit delays.
+
+The decision-support endpoint does not use an LLM.
+
+**Important:** The network and scenarios use synthetic data. This is not a live logistics feed or a general-purpose global route optimizer.
+
+See [`docs/global-network.md`](docs/global-network.md) and [`docs/web-api.md`](docs/web-api.md).
 
 ---
 
 ## Roadmap
 
-### Phase 1
+### Phase 1 — Core Optimization Foundation
+- Core optimization architecture.
+- Classical optimization modules.
+- CVRP models and solvers.
+- Initial benchmarking framework.
 
-- Core Optimization Architecture
-- Classical Optimization Modules
-- Benchmark Framework (initial CVRP benchmarking implemented)
+**Status:** Implemented.
 
-### Phase 2
+### Phase 2 — Quantum-Classical Optimization
+- QUBO modelling and Ising conversion.
+- Backend-neutral solver architecture.
+- QAOA workflows.
+- Qiskit and Qulacs simulator integrations.
+- Quantum experiment evaluation and benchmarking foundations.
 
-- Hybrid Optimization Engine
-- Quantum Integrations
-- Enterprise Optimization Workflows
+**Status:** Initial implementation completed; ongoing development.
 
-### Phase 3
+### Phase 3 — Enterprise Expansion
+- Advanced enterprise optimization workflows.
+- Additional solver and framework integrations.
+- Expanded optimization problem libraries.
+- Production data integrations.
+- Scalability and performance improvements.
+- Further quantum computing integrations.
 
-- Enterprise APIs
-- Performance Benchmarking
-- Production Deployment
-
----
-
-## Design Principles
-
-- Solver-agnostic architecture
-- Benchmark-driven optimization
-- Modular design
-- Enterprise-first engineering
-- Hybrid computing where appropriate
-
----
-
-## Philosophy
-
-QSupply is solver-agnostic.
-
-Rather than assuming a particular optimization paradigm is superior, QSupply aims to benchmark and apply the most appropriate computational approach for each problem—whether mathematical optimization, heuristics, metaheuristics, hybrid methods, or quantum computing.
+**Status:** In progress / planned.
 
 ---
 
+## Running QSupply Locally
 
-## Status
+To run the application from the repository root, use two terminals.
 
-🚧 QSupply is an early local prototype. It includes tested Python optimization
-models, CVRP heuristic and exact solvers, benchmarking, an optional API, and a
-browser dashboard. A bounded synthetic multimodal route and disruption-recovery
-demonstration is implemented. Qiskit is available as an optional local
-StatevectorSampler adapter; production data integrations and Fujitsu QARP
-execution are not implemented or verified.
+**Terminal 1 — Backend API**
 
-Current focus:
-- System architecture and core optimization framework
-- Benchmark problem definitions
-- Classical optimization baselines
-- Hybrid quantum-classical workflows
-- Initial enterprise use cases in supply chain and logistics
-
-The first usable local prototype is available below.
-
-### Implemented functionality: QUBO energy evaluation
-
-The repository now includes a minimal Python `QUBO` model for named binary
-variables. It evaluates `E(x) = Σ Q[i,j] × x[i] × x[j]` for a complete
-assignment and reports clear errors for missing, unknown, or non-binary
-assignment values. Boolean assignments (`False`/`True`) are also accepted as
-0/1. See [`src/README.md`](src/README.md) for a usage example and test command.
-
-### Implemented functionality: import-export QUBO formulation
-
-The dependency-free import-export module formulates shipment-option choices,
-delay/time/carbon costs, exactly-one selection penalties and shared integer
-lane capacities as a QUBO. The constant offset is retained separately;
-decoding, original-data feasibility checks and business-cost evaluation are
-provided independently of the QUBO penalty energy. A small synthetic example
-uses exhaustive enumeration only to verify the five-bit formulation. This is
-not a general solver. The optional Qulacs QAOA workflow below currently runs a
-separate synthetic QUBO example. Optional Qiskit support is available through
-the local StatevectorSampler adapter; Fujitsu QARP remains unimplemented.
-
-### Implemented functionality: QUBO-to-Ising conversion
-
-`qubo_to_ising` converts the named QUBO model to `C + Σ h[i] z[i] + Σ
-J[i,j] z[i] z[j]`, using `z[i] = 1 - 2*x[i]` (bit 0 is spin +1; bit 1 is
-spin -1). It combines the QUBO's supplied ordered-pair coefficients for each
-unordered pair, preserves declared variable/register order, and accepts a
-separate constant offset. Integer and rational coefficients are converted
-with exact rational factors. See
-[`src/README.md`](src/README.md#qubo-to-ising-conversion).
-
-### Implemented functionality: exact QUBO reference execution
-
-The backend-neutral solver contract and deterministic `ExactQUBOSolver` are
-available for small QUBOs. The default maximum is 12 variables (4,096
-assignments); it enumerates all assignments and is intended as a classical
-reference for future adapters, not a scalable optimizer. Results separate
-QUBO/full/Ising energy from
-optional domain feasibility and business objective. See
-[`src/README.md`](src/README.md#common-solver-contract-and-exact-qubo-reference).
-
-### Implemented functionality: bounded QAOA on optional Qulacs simulator
-
-QSupply includes a backend-neutral QAOA circuit plan and a separate optional
-Qulacs CPU state-vector adapter. It prepares an all-`|+>` register, applies
-cost evolution for the converted Ising Hamiltonian and an `X` mixer at each
-layer, then optimizes angles with seeded SPSA or coordinate search and samples
-the final circuit. The initial API limits runs to 12 variables, depth 3, 25
-optimizer iterations and 2,048 shots per evaluation. The sample dashboard
-workflow uses only a labelled five-variable synthetic import-export QUBO.
-Every selected bitstring is rescored against the original QUBO and full offset;
-domain feasibility is reported only after the independent validator runs.
-This is local classical state-vector simulation, not execution on quantum
-hardware, a performance claim, or evidence of quantum advantage. Qiskit is now
-available as a separate optional local StatevectorSampler adapter. Fujitsu
-QARP remains unimplemented and unverified. Install either
-`requirements-quantum.txt` or `requirements-qiskit.txt` to enable its matching
-adapter. See [`src/README.md`](src/README.md#optional-qaoa-backends).
-
-### Implemented functionality: CVRP route heuristic
-
-The `CVRPProblem` model represents a single depot, customer demands, vehicle
-capacities, and a complete distance matrix. The dependency-free
-`NearestNeighborTwoOptSolver` constructs capacity-feasible routes and applies
-2-opt local search, with a synthetic five-customer, two-vehicle example in
-[`examples/cvrp_synthetic.py`](examples/cvrp_synthetic.py). It is a heuristic
-and is not guaranteed to find a globally optimal solution. Quantum hardware
-execution, quantum advantage, and real-world map integration are not
-implemented.
-
-### Implemented functionality: CVRP benchmarking
-
-The benchmarking engine compares the nearest-neighbour seed, its 2-opt-improved
-routes, and an exact reference on seeded synthetic instances with 5, 7, and 9
-customers. The exact subset dynamic program is capped at 10 customers and has
-exponential time and memory growth; it is intended only as a small-instance
-reference. Results include routes, distance, feasibility, vehicles used,
-wall-clock time, and heuristic optimality gap. The gap is measured against the
-exact result; heuristic results are not globally optimality claims. See
-[`benchmarks/README.md`](benchmarks/README.md).
-
-The exact solver preserves integer/rational distance precision. Each input
-Python float is treated as its exact stored IEEE-754 binary value and summed
-without intermediate rounding; capacity constraints use the same convention.
-Benchmark reports include generated seeds and
-instance configuration; heuristic construction failures are reported without
-aborting exact evaluation. Timings are single-run observations, not statistical
-performance claims.
-
-### Local dashboard and API
-
-The optional FastAPI adapter exposes the CVRP engine and a small global
-multimodal demonstration. The global workspace uses a deterministic synthetic
-network and shipment set to generate bounded candidate routes, compare a
-baseline assignment with simulated corridor disruptions, and report recovery
-feasibility and business metrics. The global data catalog covers 74 synthetic
-locations and 122 directed links across the major trade regions, with six
-runnable international and domestic demonstration scenarios. The map supports
-regional, country, transport-mode and location-type filters plus corridor
-inspection. The service provides configurable normalized route
-rankings, deterministic route analysis and decision support, per-mode carbon
-breakdowns, saved custom disruption scenarios, and downloadable CSV/PDF reports
-for persisted runs. Custom scenarios support closures, unavailable locations,
-capacity reductions, freight/time multipliers and additive transit delays. The
-decision-support endpoint does not use an LLM. The map and product overview
-identify their inputs as synthetic. This is not a live logistics feed or a
-general global route optimizer. See
-[`docs/global-network.md`](docs/global-network.md) and
-[`docs/web-api.md`](docs/web-api.md) for assumptions, APIs and limitations.
-
-To start the application from the repository root, use two terminals:
-
-```sh
-# Terminal 1: optional Python API dependencies, then start the API
+```bash
 python3 -m pip install -r requirements-web.txt
-PYTHONPATH=src python3 -m uvicorn qsupply.api.app:app --reload --host 127.0.0.1 --port 8000
 
-# Terminal 2: install frontend dependencies, then start Vite
+PYTHONPATH=src python3 -m uvicorn qsupply.api.app:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Terminal 2 — Frontend**
+
+```bash
 cd frontend
+
 npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). For the backend API docs,
-open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). Install
-`requirements-web-test.txt` to run the API tests; run `npm test` and `npm run
-build` from `frontend` for dashboard tests and production compilation.
+Open the local dashboard:
+
+[http://127.0.0.1:5173](http://127.0.0.1:5173)
+
+Backend API documentation:
+
+[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+For API tests, install `requirements-web-test.txt`. Run `npm test` and `npm run build` from the `frontend` directory for dashboard tests and production compilation.
 
 ---
 
+## Product Access
+
+🌐 **Live Application:** [https://qsupply.macrovisionai.com/](https://qsupply.macrovisionai.com/)
+
+**Developed by MacroVision AI Pvt. Ltd.**
+
+---
 
 ## Copyright
 
 © 2026 MacroVision AI Pvt. Ltd. All Rights Reserved.
 
-For questions, collaborations, or contributions, please contact **s@macrovisionai.com**.
+For questions, collaborations or contributions, please contact **[s@macrovisionai.com](mailto:s@macrovisionai.com)**.
