@@ -170,6 +170,11 @@ times, synthetic carbon by segment and mode, total distance, transfer count,
 capacity utilization, deadline slack, baseline deltas, constraints, and
 trade-off drivers. Route rankings are individual route comparisons; they do
 not override the joint shipment assignment's shared-capacity feasibility.
+Each route analysis marks whether that candidate is non-dominated across
+modeled total cost (including deadline penalty), transit time, estimated carbon
+and resilience exposure among the generated routes. This Pareto label does not
+expand the bounded candidate set or imply joint feasibility for a multi-shipment
+selection.
 Transfer and handling costs are explicitly marked as unmodeled because the
 current network data has no such inputs.
 
@@ -219,3 +224,17 @@ schedule, customs/border clearance, inter-terminal handling time/cost,
 transfer-fee accounting, actual emissions factors and country-specific
 operating restrictions remain unmodeled. OpenStreetMap provides only the
 background basemap; QSupply's synthetic route data are not fetched from it.
+
+## Security and production boundary
+
+The current API has no authentication, authorization or tenant isolation.
+Optimization, scenario and history endpoints are public to callers who can
+reach the service; persisted demo runs are not customer-private data. Request
+schemas bound route counts and shipment batches, assignment enumeration has a
+state ceiling, and list endpoints cap returned records. These guardrails limit
+some accidental workloads but are not a rate limit or a defense against abuse.
+Do not expose customer shipment data through this deployment as a secured
+multi-customer service. Before onboarding customer data, add reviewed identity
+and tenant authorization, per-tenant quotas/rate limits, job timeouts and
+cancellation, and privacy-aware audit logging. Those changes require a separate
+security design and are intentionally not introduced by the synthetic demo.

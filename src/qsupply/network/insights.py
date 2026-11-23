@@ -186,6 +186,13 @@ def _balanced_score(
     )
 
 
+def _dominates(left: tuple[float, ...], right: tuple[float, ...]) -> bool:
+    """Return whether ``left`` is no worse in every modeled metric and better in one."""
+    return all(a <= b for a, b in zip(left, right)) and any(
+        a < b for a, b in zip(left, right)
+    )
+
+
 def analyze_route_alternatives(
     profile: ShipmentProfile,
     routes: tuple[CandidateRoute, ...],
@@ -218,6 +225,23 @@ def analyze_route_alternatives(
             route.id: _balanced_score(profile, route, weights, references)
             for route in routes
         },
+    }
+    pareto_metrics = {
+        route.id: (
+            route_cost[route.id],
+            float(route.transit_time),
+            float(route.carbon_kg),
+            float(route.resilience_exposure),
+        )
+        for route in routes
+    }
+    pareto_route_ids = {
+        route_id
+        for route_id, metrics in pareto_metrics.items()
+        if not any(
+            other_id != route_id and _dominates(other_metrics, metrics)
+            for other_id, other_metrics in pareto_metrics.items()
+        )
     }
     rankings = {
         key: sorted(values, key=lambda route_id: (values[route_id], route_id))
@@ -317,6 +341,7 @@ def analyze_route_alternatives(
         advantages, tradeoffs, recommendation = provider.explain(context)
         analyses[route.id] = {
             "route_id": route.id,
+            "pareto_optimal": route.id in pareto_route_ids,
             "total_cost": cost,
             "delay_penalty": _delay_penalty(profile, route),
             "deadline_met": context.deadline_met,

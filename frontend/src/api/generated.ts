@@ -1063,6 +1063,8 @@ export interface components {
         RouteAnalysisResponse: {
             /** Route Id */
             route_id: string;
+            /** True when no other generated candidate is no worse across cost, time, carbon, and exposure and strictly better in at least one. */
+            pareto_optimal: boolean;
             /** Total Cost */
             total_cost: number;
             /** Delay Penalty */

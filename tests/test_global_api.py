@@ -201,8 +201,24 @@ class TestGlobalMultimodalAPI(unittest.TestCase):
         self.assertFalse(next(iter(body["analyses"].values()))["uses_llm"])
         self.assertEqual(body["rankings"]["balanced"][0], body["recommended_route_id"])
         self.assertEqual(set(body["analyses"]), {route["id"] for route in body["routes"]})
+        metrics = {
+            route["id"]: (
+                body["analyses"][route["id"]]["total_cost"],
+                route["transit_time"],
+                route["carbon_kg"],
+                route["resilience_exposure"],
+            )
+            for route in body["routes"]
+        }
         for route in body["routes"]:
             analysis = body["analyses"][route["id"]]
+            dominated = any(
+                other_id != route["id"]
+                and all(left <= right for left, right in zip(metrics[other_id], metrics[route["id"]]))
+                and any(left < right for left, right in zip(metrics[other_id], metrics[route["id"]]))
+                for other_id in metrics
+            )
+            self.assertEqual(analysis["pareto_optimal"], not dominated)
             self.assertEqual(analysis["delta_vs_baseline"]["baseline_route_id"], body["baseline_route"]["id"])
             baseline = body["baseline_route"]
             baseline_cost = baseline["freight_cost"] + max(0, baseline["transit_time"] - 24) * 18

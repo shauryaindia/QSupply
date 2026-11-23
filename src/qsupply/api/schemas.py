@@ -415,6 +415,9 @@ class RouteCapacityConstraint(BaseModel):
 
 class RouteAnalysisResponse(BaseModel):
     route_id: str
+    pareto_optimal: bool = Field(
+        description="True when no other generated candidate is no worse across cost, time, carbon, and exposure and strictly better in at least one."
+    )
     total_cost: float
     delay_penalty: float
     deadline_met: bool | None
