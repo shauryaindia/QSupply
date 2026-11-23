@@ -208,15 +208,47 @@ provider-independent. OpenStreetMap's public tile service is
 best-effort and has no SLA; production traffic should use a suitable tile
 provider or self-hosted tiles in accordance with the provider's policy.
 
+## Bounded route-assignment QUBO bridge
+
+The Quantum Computing page and `/api/v1/quantum/route-assignment` endpoints
+include a synthetic two-shipment example that takes generated multimodal route
+candidates into QSupply's existing ordered-pair QUBO, Ising and QAOA contracts.
+Each shipment has one binary choice per candidate route. One-hot penalties
+enforce one route per shipment; shared integer link capacities use bounded
+binary slack variables and squared equality penalties. A separately returned
+constant offset restores the full penalized energy. An independent network
+validator recalculates route validity, shared load and business metrics.
+
+Exact QUBO enumeration and the existing classical candidate assignment use the
+same three generated candidate routes per shipment and the same fixed
+baseline-derived normalization references. Exactness therefore applies only
+to that finite route set, not to every possible route in the network. The
+current QAOA variable budget is 12, including capacity slack bits. The
+illustrative access-capacity disruption and all route/cost/emissions values are
+synthetic. An optional Qiskit or Qulacs run remains local state-vector
+simulation; it is not a quantum hardware or quantum advantage result.
+
+Run the console example with:
+
+```sh
+PYTHONPATH=src python3 examples/route_assignment_qubo.py
+```
+
+The example also checks whether a carbon-priority weight profile changes the
+preferred route in this candidate set. See
+[`docs/quantum/route-assignment-qubo.md`](quantum/route-assignment-qubo.md)
+for the equations and penalty derivation.
+
 ## Not implemented
 
 This demonstration does not provide live data ingestion, user-defined network
 editing, automated disruption detection, production-grade route schedules,
 geographic clustering, real shipment tracking, a global MILP/CP-SAT solver,
-general QUBO solving, a QAOA-based route optimizer, or Fujitsu QARP integration.
-The separate bounded synthetic QUBO QAOA workflow is not connected to this
-network planner. The implemented
-assignment planner is a bounded classical exact search over candidate routes,
+general-purpose route QUBO/QAOA solving, or Fujitsu QARP integration. The
+bounded route-assignment QUBO workflow described above is connected to this
+network planner, but is restricted to one curated synthetic example and a
+12-variable ceiling. The implemented
+classical assignment planner is a bounded exact search over candidate routes,
 not a quantum solver and not a globally optimal network path guarantee.
 Road/rail alignments and ocean/air geometries are illustrative waypoint paths,
 not navigational routes or geospatially validated transport services. Carrier

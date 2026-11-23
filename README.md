@@ -259,6 +259,14 @@ The decision-support endpoint does not use an LLM.
 
 See [`docs/global-network.md`](docs/global-network.md) and [`docs/web-api.md`](docs/web-api.md).
 
+### 9. Multimodal Route-Assignment QUBO Bridge
+
+QSupply includes a bounded synthetic route-assignment formulation that connects generated network routes to the existing QUBO, Ising and QAOA engine. It uses one binary route choice per shipment, one-hot penalties, and exact binary slack encodings for binding shared link capacities. The API and Quantum Computing page let a user inspect the generated candidates, QUBO variables and coefficients, run the exact QUBO reference or classical assignment, and execute QAOA through an available local Qiskit/Qulacs simulator.
+
+The exact reference and classical comparison use the same generated route candidates and fixed baseline normalization. Exactness is limited to those candidates; the example has two synthetic shipments, three options each and an overall 12-variable ceiling. Capacity, routes and business metrics are illustrative. This is not live logistics optimization, quantum hardware execution or evidence of quantum advantage.
+
+Run the reproducible console example with `PYTHONPATH=src python3 examples/route_assignment_qubo.py`. See [`docs/quantum/route-assignment-qubo.md`](docs/quantum/route-assignment-qubo.md) for the formulation and limitations.
+
 ---
 
 ## Roadmap

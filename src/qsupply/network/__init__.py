@@ -22,6 +22,21 @@ from .planning import (
     simulate_movement,
 )
 from .routing import CandidateRoute, RouteLeg, generate_candidate_routes, validate_candidate_route
+from .route_qubo import (
+    MAX_ROUTE_QUBO_VARIABLES,
+    CapacityEncoding,
+    RouteAssignmentQUBO,
+    RouteBusinessMetrics,
+    RoutePlanFeasibility,
+    RouteQUBOEvaluation,
+    UnsupportedRouteQUBOError,
+    formulate_route_assignment_qubo,
+)
+from .route_qubo_demo import (
+    RouteQUBOReferenceComparison,
+    build_route_qubo_demo,
+    compare_route_qubo_to_classical,
+)
 
 __all__ = [
     "Location",
@@ -45,4 +60,15 @@ __all__ = [
     "assign_routes",
     "compare_recovery",
     "simulate_movement",
+    "MAX_ROUTE_QUBO_VARIABLES",
+    "CapacityEncoding",
+    "RouteAssignmentQUBO",
+    "RouteBusinessMetrics",
+    "RoutePlanFeasibility",
+    "RouteQUBOEvaluation",
+    "UnsupportedRouteQUBOError",
+    "formulate_route_assignment_qubo",
+    "RouteQUBOReferenceComparison",
+    "build_route_qubo_demo",
+    "compare_route_qubo_to_classical",
 ]

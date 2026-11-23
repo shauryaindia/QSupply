@@ -6,6 +6,12 @@ Run `PYTHONPATH=src python3 examples/import_export_qubo.py` for the small
 import-export QUBO example. It enumerates this five-bit example to verify the
 formulation; it is not a general-purpose solver.
 
+Run `PYTHONPATH=src python3 examples/route_assignment_qubo.py` for a bounded
+multimodal route-assignment QUBO demonstration. It compares exact QUBO and
+classical assignment results over the same generated candidates, and shows a
+carbon-priority comparison on the synthetic disruption scenario. Exactness is
+limited to the candidate routes shown by that example.
+
 Install optional Qulacs support with `python3 -m pip install -r
 requirements-quantum.txt`, then run `PYTHONPATH=src python3
 examples/qulacs_qaoa.py` for a seeded QAOA simulator run and exact classical
