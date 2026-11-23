@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
-import { api, type GlobalOptimization, type QuantumQAOAResult, type RouteIntelligence, type RunRecord } from "./api/client";
+import { api, type GlobalOptimization, type QuantumQAOAResult, type RouteIntelligence, type RouteQUBOExample, type RouteQUBORun, type RunRecord } from "./api/client";
 
 vi.mock("./GlobalNetworkMap", () => ({
   default: () => <div data-testid="global-map" />,
@@ -23,6 +23,8 @@ vi.mock("./api/client", async (importOriginal) => {
       health: vi.fn(),
       capabilities: vi.fn(),
       runQuantumQAOA: vi.fn(),
+      routeQUBOExample: vi.fn(),
+      runRouteQUBO: vi.fn(),
       instances: vi.fn(),
       network: vi.fn(),
       globalNetwork: vi.fn(),
@@ -134,6 +136,93 @@ beforeEach(() => {
     ],
     exact_cvrp_customer_limit: 10,
   });
+  const candidate = {
+    id: "route-demo-id",
+    modes: ["road", "sea"],
+    link_ids: ["road-shanghai-port", "sea-demo"],
+    freight_cost: "100",
+    transit_time: "20",
+    carbon_kg: "50",
+    resilience_exposure: "1",
+  };
+  const routeQuboExample: RouteQUBOExample = {
+    synthetic: true,
+    scenario_id: "synthetic-route-qubo-shanghai-access-capacity",
+    scenario_description: "Synthetic port-road access capacity is reduced from 30 to 3 load units.",
+    shipment_ids: ["EXP-104", "EXP-407"],
+    candidates: { "EXP-104": [candidate], "EXP-407": [{ ...candidate, id: "second-route" }] },
+    variable_order: ["route_s0_r0", "route_s0_r1", "route_s1_r0", "route_s1_r1", "slack_l0_b0"],
+    variable_kinds: { route_s0_r0: "route_choice", slack_l0_b0: "capacity_slack" },
+    variable_mapping: [
+      { variable: "route_s0_r0", kind: "route_choice", shipment_id: "EXP-104", route_id: candidate.id },
+      { variable: "route_s0_r1", kind: "route_choice", shipment_id: "EXP-104", route_id: "alt" },
+      { variable: "route_s1_r0", kind: "route_choice", shipment_id: "EXP-407", route_id: "second-route" },
+      { variable: "route_s1_r1", kind: "route_choice", shipment_id: "EXP-407", route_id: "alt2" },
+      { variable: "slack_l0_b0", kind: "capacity_slack", link_id: "road-shanghai-port", slack_weight: 1 },
+    ],
+    decision_variable_count: 4,
+    slack_variable_count: 1,
+    variable_count: 5,
+    variable_limit: 12,
+    qubo_coefficients: [["route_s0_r0", "route_s0_r0", "1"]],
+    qubo_offset: "2",
+    infeasibility_penalty: "5",
+    normalization_references: { cost: "100", delivery_time: "20", carbon: "50", resilience: "1" },
+    weights: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
+    available_methods: [
+      { id: "exact-qubo", name: "Exact QUBO enumeration", available: true, description: "Enumerate." },
+      { id: "classical-assignment", name: "Classical exact assignment", available: true, description: "Assign." },
+      { id: "qiskit", name: "Qiskit", available: false, description: "Unavailable." },
+    ],
+  };
+  vi.mocked(api.routeQUBOExample).mockResolvedValue(routeQuboExample);
+  const routeQuboRun: RouteQUBORun = {
+    run_id: "route-run",
+    status: "completed",
+    backend_id: "exact-qubo",
+    backend_name: "Exact QUBO Enumeration",
+    execution_mode: "local_classical",
+    timing_scope: "exact enumeration",
+    elapsed_seconds: 0.01,
+    synthetic: true,
+    scenario_id: routeQuboExample.scenario_id,
+    shipment_ids: routeQuboExample.shipment_ids,
+    variable_count: 8,
+    decision_variable_count: 6,
+    slack_variable_count: 2,
+    variable_order: routeQuboExample.variable_order,
+    variable_kinds: routeQuboExample.variable_kinds,
+    variable_mapping: routeQuboExample.variable_mapping,
+    qubo_coefficients: routeQuboExample.qubo_coefficients,
+    qubo_offset: "2",
+    infeasibility_penalty: "5",
+    best_binary_assignment: { route_s0_r0: 1 },
+    qubo_energy: "-1",
+    full_penalized_energy: "1",
+    ising_energy: "1",
+    feasible: true,
+    feasibility_violations: [],
+    decoded_routes: { "EXP-104": "route-demo-id", "EXP-407": "second-route" },
+    route_details: { "EXP-104": candidate, "EXP-407": { ...candidate, id: "second-route" } },
+    capacity_usage: { "road-shanghai-port": 2 },
+    capacity_utilization: { "road-shanghai-port": 0.67 },
+    business_metrics: {
+      freight_cost: "200", delay_penalty: "0", total_cost: "200", delivery_time: "40",
+      carbon_kg: "100", resilience_exposure: "2", weighted_objective: "1",
+    },
+    objective_gap_percent: 0,
+    exact_reference_objective: "1",
+    exact_reference_qubo_energy: "-1",
+    exact_reference_full_energy: "1",
+    exact_reference_feasible: true,
+    exact_reference_routes: { "EXP-104": "route-demo-id", "EXP-407": "second-route" },
+    exact_reference_seconds: 0.01,
+    classical_reference_objective: "1",
+    classical_reference_feasible: true,
+    classical_reference_routes: { "EXP-104": "route-demo-id", "EXP-407": "second-route" },
+    reference_scope: "exact optimum over generated candidates",
+  };
+  vi.mocked(api.runRouteQUBO).mockResolvedValue(routeQuboRun);
   vi.mocked(api.instances).mockResolvedValue([
     {
       id: "synthetic-5",
@@ -375,6 +464,26 @@ describe("QSupply dashboard interactions", () => {
     expect(screen.getByText("S1: B")).toBeInTheDocument();
     expect(screen.getAllByText("17.000").length).toBeGreaterThan(1);
     expect(screen.getByText("Best observed")).toBeInTheDocument();
+  });
+
+  it("runs the route-assignment QUBO from the Quantum page and shows its validated plan", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
+    await user.click(await screen.findByRole("button", { name: "Run exact QUBO reference" }));
+    expect(api.runRouteQUBO).toHaveBeenCalledWith({
+      backend: "exact-qubo",
+      weights: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
+      depth: 1,
+      optimizer: "spsa",
+      max_iterations: 5,
+      shots: 128,
+      random_seed: 2026,
+    });
+    expect(await screen.findByText("Independently validated shipment routes")).toBeInTheDocument();
+    expect(screen.getAllByText("EXP-104: route-demo-id").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Synthetic disruption · synthetic-route-qubo-shanghai-access-capacity")).toBeInTheDocument();
   });
 
   it("loads a runnable named global demo and its explicit assignment scope", async () => {

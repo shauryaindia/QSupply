@@ -329,6 +329,128 @@ class ObjectiveWeightsInput(BaseModel):
         return self
 
 
+class RouteQUBOBackendOption(BaseModel):
+    id: str
+    name: str
+    available: bool
+    description: str
+
+
+class RouteQUBOCandidate(BaseModel):
+    id: str
+    modes: list[str]
+    link_ids: list[str]
+    freight_cost: str
+    transit_time: str
+    carbon_kg: str
+    resilience_exposure: str
+
+
+class RouteQUBOVariableMapping(BaseModel):
+    variable: str
+    kind: str
+    shipment_id: str | None = None
+    route_id: str | None = None
+    link_id: str | None = None
+    slack_weight: int | None = None
+
+
+class RouteQUBOExampleResponse(BaseModel):
+    synthetic: bool = True
+    scenario_id: str
+    scenario_description: str
+    shipment_ids: list[str]
+    candidates: dict[str, list[RouteQUBOCandidate]]
+    variable_order: list[str]
+    variable_kinds: dict[str, str]
+    variable_mapping: list[RouteQUBOVariableMapping]
+    decision_variable_count: int
+    slack_variable_count: int
+    variable_count: int
+    variable_limit: int
+    qubo_coefficients: list[tuple[str, str, str]]
+    qubo_offset: str
+    infeasibility_penalty: str
+    normalization_references: dict[str, str]
+    weights: ObjectiveWeightsInput
+    available_methods: list[RouteQUBOBackendOption]
+
+
+class RouteQUBORunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    backend: StrictStr = Field(default="exact-qubo", min_length=1)
+    weights: ObjectiveWeightsInput = Field(default_factory=ObjectiveWeightsInput)
+    depth: StrictInt = Field(default=1, ge=1, le=3)
+    optimizer: Literal["spsa", "coordinate"] = "spsa"
+    max_iterations: StrictInt = Field(default=5, ge=1, le=25)
+    shots: StrictInt = Field(default=128, ge=16, le=2048)
+    random_seed: StrictInt = Field(default=2026, ge=0, le=2147483647)
+
+
+class RouteQUBOMetrics(BaseModel):
+    freight_cost: str
+    delay_penalty: str
+    total_cost: str
+    delivery_time: str
+    carbon_kg: str
+    resilience_exposure: str
+    weighted_objective: str
+
+
+class RouteQUBORunResponse(BaseModel):
+    run_id: str
+    status: str
+    backend_id: str
+    backend_name: str
+    backend_version: str | None = None
+    execution_mode: str
+    timing_scope: str
+    elapsed_seconds: float
+    synthetic: bool = True
+    scenario_id: str
+    shipment_ids: list[str]
+    variable_count: int
+    decision_variable_count: int
+    slack_variable_count: int
+    depth: int | None = None
+    shots: int | None = None
+    random_seed: int | None = None
+    optimizer: str | None = None
+    optimizer_iterations: int | None = None
+    execution_metadata: QuantumExecutionMetadata | None = None
+    error: str | None = None
+    error_category: str | None = None
+    variable_order: list[str]
+    variable_kinds: dict[str, str]
+    variable_mapping: list[RouteQUBOVariableMapping]
+    qubo_coefficients: list[tuple[str, str, str]]
+    qubo_offset: str
+    infeasibility_penalty: str
+    best_binary_assignment: dict[str, int] | None
+    qubo_energy: str | None
+    full_penalized_energy: str | None
+    ising_energy: str | None
+    feasible: bool | None
+    feasibility_violations: list[str]
+    decoded_routes: dict[str, str] | None
+    route_details: dict[str, RouteQUBOCandidate]
+    capacity_usage: dict[str, int]
+    capacity_utilization: dict[str, float]
+    business_metrics: RouteQUBOMetrics | None
+    objective_gap_percent: float | None
+    exact_reference_objective: str | None
+    exact_reference_qubo_energy: str
+    exact_reference_full_energy: str
+    exact_reference_feasible: bool
+    exact_reference_routes: dict[str, str] | None
+    exact_reference_seconds: float
+    classical_reference_objective: str | None
+    classical_reference_feasible: bool
+    classical_reference_routes: dict[str, str] | None
+    reference_scope: str
+
+
 class GlobalRoutesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

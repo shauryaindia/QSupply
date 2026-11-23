@@ -55,6 +55,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quantum/route-assignment/example": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Route Assignment Qubo Example */
+        get: operations["route_assignment_qubo_example_api_v1_quantum_route_assignment_example_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quantum/route-assignment/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Route Assignment Qubo */
+        post: operations["run_route_assignment_qubo_api_v1_quantum_route_assignment_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances": {
         parameters: {
             query?: never;
@@ -417,36 +451,7 @@ export interface components {
             /** Exact Cvrp Customer Limit */
             exact_cvrp_customer_limit: number;
             /** Backends */
-            backends: components["schemas"]["QuantumBackendCapability"][];
-        };
-        /** QuantumBackendCapability */
-        QuantumBackendCapability: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string;
-            /** Available */
-            available: boolean;
-            /** Status */
-            status: string;
-            /** Supported Representations */
-            supported_representations: string[];
-            /** Backend Type */
-            backend_type: string;
-            /** Execution Mode */
-            execution_mode: string;
-            /** Optional Dependency */
-            optional_dependency: string;
-            /** Dependency Requirements */
-            dependency_requirements: string;
-            /** Version */
-            version: string | null;
-            /** Supported Configuration */
-            supported_configuration: {
-                [key: string]: unknown;
-            };
+            backends?: components["schemas"]["QuantumBackendCapability"][];
         };
         /** CapabilityStatus */
         CapabilityStatus: {
@@ -869,6 +874,73 @@ export interface components {
             /** Weighted Objective */
             weighted_objective: number;
         };
+        /** QuantumBackendCapability */
+        QuantumBackendCapability: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Available */
+            available: boolean;
+            /** Status */
+            status: string;
+            /** Supported Representations */
+            supported_representations: string[];
+            /** Backend Type */
+            backend_type: string;
+            /** Execution Mode */
+            execution_mode: string;
+            /** Optional Dependency */
+            optional_dependency: string;
+            /** Dependency Requirements */
+            dependency_requirements: string;
+            /** Version */
+            version: string | null;
+            /** Supported Configuration */
+            supported_configuration: {
+                [key: string]: unknown;
+            };
+        };
+        /** QuantumExecutionError */
+        QuantumExecutionError: {
+            /** Category */
+            category: string;
+            /** Message */
+            message: string;
+            /** Exception Type */
+            exception_type: string | null;
+        };
+        /** QuantumExecutionMetadata */
+        QuantumExecutionMetadata: {
+            /** Backend Id */
+            backend_id: string;
+            /** Backend Name */
+            backend_name: string;
+            /** Backend Version */
+            backend_version: string | null;
+            /** Execution Mode */
+            execution_mode: string;
+            /** Timing Scope */
+            timing_scope: string | null;
+            timings: components["schemas"]["QuantumExecutionTimings"];
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            };
+        };
+        /** QuantumExecutionTimings */
+        QuantumExecutionTimings: {
+            /** Submission Seconds */
+            submission_seconds?: number | null;
+            /** Queue Seconds */
+            queue_seconds?: number | null;
+            /** Remote Execution Seconds */
+            remote_execution_seconds?: number | null;
+            /** Result Retrieval Seconds */
+            result_retrieval_seconds?: number | null;
+        };
         /** QuantumQAOARequest */
         QuantumQAOARequest: {
             /**
@@ -880,7 +952,6 @@ export interface components {
             /**
              * Backend
              * @default qulacs
-             * @enum {string}
              */
             backend: string;
             /**
@@ -923,10 +994,7 @@ export interface components {
             status: string;
             /** Backend Name */
             backend_name: string;
-            /**
-             * Backend Id
-             * @enum {string}
-             */
+            /** Backend Id */
             backend_id: string;
             /** Backend Version */
             backend_version: string | null;
@@ -975,9 +1043,7 @@ export interface components {
             sample_frequencies: components["schemas"]["QuantumSampleFrequency"][];
             /** Sample Energies */
             sample_energies?: components["schemas"]["QuantumSampleEnergy"][];
-            /** Execution Metadata */
             execution_metadata?: components["schemas"]["QuantumExecutionMetadata"] | null;
-            /** Error Details */
             error_details?: components["schemas"]["QuantumExecutionError"] | null;
             /** Qubo Energy */
             qubo_energy: string | null;
@@ -1014,13 +1080,6 @@ export interface components {
             /** Error */
             error?: string | null;
         };
-        /** QuantumSampleFrequency */
-        QuantumSampleFrequency: {
-            /** Bitstring */
-            bitstring: string;
-            /** Count */
-            count: number;
-        };
         /** QuantumSampleEnergy */
         QuantumSampleEnergy: {
             /** Bitstring */
@@ -1034,36 +1093,21 @@ export interface components {
             /** Ising Energy */
             ising_energy: string;
         };
-        /** QuantumExecutionTimings */
-        QuantumExecutionTimings: {
-            submission_seconds: number | null;
-            queue_seconds: number | null;
-            remote_execution_seconds: number | null;
-            result_retrieval_seconds: number | null;
-        };
-        /** QuantumExecutionMetadata */
-        QuantumExecutionMetadata: {
-            backend_id: string;
-            backend_name: string;
-            backend_version: string | null;
-            execution_mode: string;
-            timing_scope: string | null;
-            timings: components["schemas"]["QuantumExecutionTimings"];
-            attributes: {
-                [key: string]: unknown;
-            };
-        };
-        /** QuantumExecutionError */
-        QuantumExecutionError: {
-            category: string;
-            message: string;
-            exception_type: string | null;
+        /** QuantumSampleFrequency */
+        QuantumSampleFrequency: {
+            /** Bitstring */
+            bitstring: string;
+            /** Count */
+            count: number;
         };
         /** RouteAnalysisResponse */
         RouteAnalysisResponse: {
             /** Route Id */
             route_id: string;
-            /** True when no other generated candidate is no worse across cost, time, carbon, and exposure and strictly better in at least one. */
+            /**
+             * Pareto Optimal
+             * @description True when no other generated candidate is no worse across cost, time, carbon, and exposure and strictly better in at least one.
+             */
             pareto_optimal: boolean;
             /** Total Cost */
             total_cost: number;
@@ -1272,6 +1316,276 @@ export interface components {
             value: number;
             /** Unit */
             unit: string;
+        };
+        /** RouteQUBOBackendOption */
+        RouteQUBOBackendOption: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Available */
+            available: boolean;
+            /** Description */
+            description: string;
+        };
+        /** RouteQUBOCandidate */
+        RouteQUBOCandidate: {
+            /** Id */
+            id: string;
+            /** Modes */
+            modes: string[];
+            /** Link Ids */
+            link_ids: string[];
+            /** Freight Cost */
+            freight_cost: string;
+            /** Transit Time */
+            transit_time: string;
+            /** Carbon Kg */
+            carbon_kg: string;
+            /** Resilience Exposure */
+            resilience_exposure: string;
+        };
+        /** RouteQUBOExampleResponse */
+        RouteQUBOExampleResponse: {
+            /**
+             * Synthetic
+             * @default true
+             */
+            synthetic: boolean;
+            /** Scenario Id */
+            scenario_id: string;
+            /** Scenario Description */
+            scenario_description: string;
+            /** Shipment Ids */
+            shipment_ids: string[];
+            /** Candidates */
+            candidates: {
+                [key: string]: components["schemas"]["RouteQUBOCandidate"][];
+            };
+            /** Variable Order */
+            variable_order: string[];
+            /** Variable Kinds */
+            variable_kinds: {
+                [key: string]: string;
+            };
+            /** Variable Mapping */
+            variable_mapping: components["schemas"]["RouteQUBOVariableMapping"][];
+            /** Decision Variable Count */
+            decision_variable_count: number;
+            /** Slack Variable Count */
+            slack_variable_count: number;
+            /** Variable Count */
+            variable_count: number;
+            /** Variable Limit */
+            variable_limit: number;
+            /** Qubo Coefficients */
+            qubo_coefficients: [
+                string,
+                string,
+                string
+            ][];
+            /** Qubo Offset */
+            qubo_offset: string;
+            /** Infeasibility Penalty */
+            infeasibility_penalty: string;
+            /** Normalization References */
+            normalization_references: {
+                [key: string]: string;
+            };
+            weights: components["schemas"]["ObjectiveWeightsInput"];
+            /** Available Methods */
+            available_methods: components["schemas"]["RouteQUBOBackendOption"][];
+        };
+        /** RouteQUBOMetrics */
+        RouteQUBOMetrics: {
+            /** Freight Cost */
+            freight_cost: string;
+            /** Delay Penalty */
+            delay_penalty: string;
+            /** Total Cost */
+            total_cost: string;
+            /** Delivery Time */
+            delivery_time: string;
+            /** Carbon Kg */
+            carbon_kg: string;
+            /** Resilience Exposure */
+            resilience_exposure: string;
+            /** Weighted Objective */
+            weighted_objective: string;
+        };
+        /** RouteQUBORunRequest */
+        RouteQUBORunRequest: {
+            /**
+             * Backend
+             * @default exact-qubo
+             */
+            backend: string;
+            weights?: components["schemas"]["ObjectiveWeightsInput"];
+            /**
+             * Depth
+             * @default 1
+             */
+            depth: number;
+            /**
+             * Optimizer
+             * @default spsa
+             * @enum {string}
+             */
+            optimizer: "spsa" | "coordinate";
+            /**
+             * Max Iterations
+             * @default 5
+             */
+            max_iterations: number;
+            /**
+             * Shots
+             * @default 128
+             */
+            shots: number;
+            /**
+             * Random Seed
+             * @default 2026
+             */
+            random_seed: number;
+        };
+        /** RouteQUBORunResponse */
+        RouteQUBORunResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+            /** Backend Id */
+            backend_id: string;
+            /** Backend Name */
+            backend_name: string;
+            /** Backend Version */
+            backend_version?: string | null;
+            /** Execution Mode */
+            execution_mode: string;
+            /** Timing Scope */
+            timing_scope: string;
+            /** Elapsed Seconds */
+            elapsed_seconds: number;
+            /**
+             * Synthetic
+             * @default true
+             */
+            synthetic: boolean;
+            /** Scenario Id */
+            scenario_id: string;
+            /** Shipment Ids */
+            shipment_ids: string[];
+            /** Variable Count */
+            variable_count: number;
+            /** Decision Variable Count */
+            decision_variable_count: number;
+            /** Slack Variable Count */
+            slack_variable_count: number;
+            /** Depth */
+            depth?: number | null;
+            /** Shots */
+            shots?: number | null;
+            /** Random Seed */
+            random_seed?: number | null;
+            /** Optimizer */
+            optimizer?: string | null;
+            /** Optimizer Iterations */
+            optimizer_iterations?: number | null;
+            execution_metadata?: components["schemas"]["QuantumExecutionMetadata"] | null;
+            /** Error */
+            error?: string | null;
+            /** Error Category */
+            error_category?: string | null;
+            /** Variable Order */
+            variable_order: string[];
+            /** Variable Kinds */
+            variable_kinds: {
+                [key: string]: string;
+            };
+            /** Variable Mapping */
+            variable_mapping: components["schemas"]["RouteQUBOVariableMapping"][];
+            /** Qubo Coefficients */
+            qubo_coefficients: [
+                string,
+                string,
+                string
+            ][];
+            /** Qubo Offset */
+            qubo_offset: string;
+            /** Infeasibility Penalty */
+            infeasibility_penalty: string;
+            /** Best Binary Assignment */
+            best_binary_assignment: {
+                [key: string]: number;
+            } | null;
+            /** Qubo Energy */
+            qubo_energy: string | null;
+            /** Full Penalized Energy */
+            full_penalized_energy: string | null;
+            /** Ising Energy */
+            ising_energy: string | null;
+            /** Feasible */
+            feasible: boolean | null;
+            /** Feasibility Violations */
+            feasibility_violations: string[];
+            /** Decoded Routes */
+            decoded_routes: {
+                [key: string]: string;
+            } | null;
+            /** Route Details */
+            route_details: {
+                [key: string]: components["schemas"]["RouteQUBOCandidate"];
+            };
+            /** Capacity Usage */
+            capacity_usage: {
+                [key: string]: number;
+            };
+            /** Capacity Utilization */
+            capacity_utilization: {
+                [key: string]: number;
+            };
+            business_metrics: components["schemas"]["RouteQUBOMetrics"] | null;
+            /** Objective Gap Percent */
+            objective_gap_percent: number | null;
+            /** Exact Reference Objective */
+            exact_reference_objective: string | null;
+            /** Exact Reference Qubo Energy */
+            exact_reference_qubo_energy: string;
+            /** Exact Reference Full Energy */
+            exact_reference_full_energy: string;
+            /** Exact Reference Feasible */
+            exact_reference_feasible: boolean;
+            /** Exact Reference Routes */
+            exact_reference_routes: {
+                [key: string]: string;
+            } | null;
+            /** Exact Reference Seconds */
+            exact_reference_seconds: number;
+            /** Classical Reference Objective */
+            classical_reference_objective: string | null;
+            /** Classical Reference Feasible */
+            classical_reference_feasible: boolean;
+            /** Classical Reference Routes */
+            classical_reference_routes: {
+                [key: string]: string;
+            } | null;
+            /** Reference Scope */
+            reference_scope: string;
+        };
+        /** RouteQUBOVariableMapping */
+        RouteQUBOVariableMapping: {
+            /** Variable */
+            variable: string;
+            /** Kind */
+            kind: string;
+            /** Shipment Id */
+            shipment_id?: string | null;
+            /** Route Id */
+            route_id?: string | null;
+            /** Link Id */
+            link_id?: string | null;
+            /** Slack Weight */
+            slack_weight?: number | null;
         };
         /** RunCreateRequest */
         RunCreateRequest: {
@@ -1483,6 +1797,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuantumQAOAResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    route_assignment_qubo_example_api_v1_quantum_route_assignment_example_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RouteQUBOExampleResponse"];
+                };
+            };
+        };
+    };
+    run_route_assignment_qubo_api_v1_quantum_route_assignment_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouteQUBORunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RouteQUBORunResponse"];
                 };
             };
             /** @description Validation Error */

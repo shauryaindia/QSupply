@@ -14,6 +14,8 @@ export type RouteIntelligence = components["schemas"]["RouteIntelligenceResponse
 export type GlobalOptimization = components["schemas"]["GlobalOptimizationRecord"];
 export type GlobalDemo = components["schemas"]["GlobalDemoScenarioResponse"];
 export type QuantumQAOAResult = components["schemas"]["QuantumQAOAResponse"];
+export type RouteQUBOExample = components["schemas"]["RouteQUBOExampleResponse"];
+export type RouteQUBORun = components["schemas"]["RouteQUBORunResponse"];
 
 type RunCreate = paths["/api/v1/runs"]["post"]["requestBody"] extends {
   content: { "application/json": infer Body };
@@ -157,6 +159,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  routeQUBOExample: () =>
+    request<RouteQUBOExample>("/api/v1/quantum/route-assignment/example"),
+  runRouteQUBO: (input: RouteQUBORunRequest) =>
+    request<RouteQUBORun>("/api/v1/quantum/route-assignment/runs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   instances: () => request<InstanceSummary[]>("/api/v1/instances"),
   network: () => request<NetworkResponse>("/api/v1/networks/demo"),
   globalNetwork: () => request<NetworkResponse>("/api/v1/global/network"),
@@ -214,6 +223,11 @@ export const api = {
       body: JSON.stringify(input),
     }),
 };
+type RouteQUBORunRequest = paths["/api/v1/quantum/route-assignment/runs"]["post"]["requestBody"] extends {
+  content: { "application/json": infer Body };
+}
+  ? Body
+  : never;
 
 export const formatNumber = (
   value: number | string | null | undefined,

@@ -36,6 +36,8 @@ import {
   type RunRecord,
   type SolverId,
   type QuantumQAOAResult,
+  type RouteQUBOExample,
+  type RouteQUBORun,
 } from "./api/client";
 import type { components } from "./api/generated";
 
@@ -1748,6 +1750,195 @@ function clamp(value: number, range: QuantumIntegerRange): number {
   return Math.min(range.max, Math.max(range.min, value));
 }
 
+function RouteQUBOWorkspace({ capabilities }: { capabilities: Capabilities | null }) {
+  const [example, setExample] = useState<RouteQUBOExample | null>(null);
+  const [result, setResult] = useState<RouteQUBORun | null>(null);
+  const [selectedBackend, setSelectedBackend] = useState("exact-qubo");
+  const [weights, setWeights] = useState({ cost: 40, delivery_time: 25, carbon: 20, resilience: 15 });
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const [depth, setDepth] = useState(1);
+  const [iterations, setIterations] = useState(5);
+  const [shots, setShots] = useState(128);
+  const [seed, setSeed] = useState(2026);
+  const [optimizer, setOptimizer] = useState<"spsa" | "coordinate">("spsa");
+
+  useEffect(() => {
+    let active = true;
+    api.routeQUBOExample()
+      .then((value) => { if (active) setExample(value); })
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : "Route QUBO example could not be loaded.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const selectedCapability = capabilities?.backends?.find((item) => item.id === selectedBackend);
+  const backendConfiguration = selectedCapability?.supported_configuration ?? {};
+  const depthRange = quantumIntegerRange(backendConfiguration, "depth", 1, 3);
+  const iterationRange = quantumIntegerRange(backendConfiguration, "max_iterations", 1, 25);
+  const shotsRange = quantumIntegerRange(backendConfiguration, "shots", 16, 2048);
+  const seedRange = quantumIntegerRange(backendConfiguration, "random_seed", 0, 2147483647);
+  const optimizerChoices = quantumStringChoices(backendConfiguration, "optimizer", ["spsa", "coordinate"]);
+  const methods = (example?.available_methods ?? []).filter((method) => {
+    if (method.id === "exact-qubo" || method.id === "classical-assignment") return true;
+    return capabilities?.backends?.some((capability) => capability.id === method.id && capability.available) === true && method.available;
+  });
+  const selectedMethod = methods.find((method) => method.id === selectedBackend);
+  const weightsTotal = weights.cost + weights.delivery_time + weights.carbon + weights.resilience;
+  const selectedConfigurationValid = selectedBackend === "exact-qubo" || selectedBackend === "classical-assignment" || (
+    selectedCapability?.available === true && depthRange.valid && iterationRange.valid && shotsRange.valid && seedRange.valid &&
+    optimizerChoices.length > 0 && optimizerChoices.includes(optimizer) &&
+    inRange(depth, depthRange) && inRange(iterations, iterationRange) &&
+    inRange(shots, shotsRange) && inRange(seed, seedRange)
+  );
+
+  useEffect(() => {
+    if (methods.length > 0 && !methods.some((method) => method.id === selectedBackend)) {
+      setSelectedBackend("exact-qubo");
+    }
+  }, [methods.map((item) => item.id).join(","), selectedBackend]);
+
+  useEffect(() => {
+    if (depthRange.valid) setDepth((value) => clamp(value, depthRange));
+    if (iterationRange.valid) setIterations((value) => clamp(value, iterationRange));
+    if (shotsRange.valid) setShots((value) => clamp(value, shotsRange));
+    if (seedRange.valid) setSeed((value) => clamp(value, seedRange));
+    if (optimizerChoices.length && !optimizerChoices.includes(optimizer)) {
+      setOptimizer(optimizerChoices[0] as "spsa" | "coordinate");
+    }
+  }, [selectedBackend, depthRange.min, depthRange.max, depthRange.valid,
+    iterationRange.min, iterationRange.max, iterationRange.valid,
+    shotsRange.min, shotsRange.max, shotsRange.valid,
+    seedRange.min, seedRange.max, seedRange.valid, optimizerChoices.join(",")]);
+
+  const run = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedMethod?.available || weightsTotal !== 100 || !selectedConfigurationValid || running) return;
+    setRunning(true);
+    setError("");
+    try {
+      const next = await api.runRouteQUBO({
+        backend: selectedBackend,
+        weights,
+        depth,
+        optimizer,
+        max_iterations: iterations,
+        shots,
+        random_seed: seed,
+      });
+      setResult(next);
+      if (next.status !== "completed") setError(`Run ${next.status}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Route assignment execution failed.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Panel
+      title="Multimodal route-assignment QUBO"
+      subtitle="A bounded synthetic disruption example bridges existing network routes into the QUBO and QAOA engine."
+      className="quantum-workspace-panel"
+    >
+      {loading ? <div className="quantum-empty-state"><strong>Loading route-assignment formulation</strong><p>Reading the synthetic candidate routes and backend availability from the API.</p></div> : null}
+      {!loading && error && !example ? <div className="quantum-run-error" role="alert">{error}</div> : null}
+      {example && (
+        <>
+          <div className="quantum-callout quantum-callout-ready">
+            <span>i</span><div><strong>Synthetic disruption · {example.scenario_id}</strong><p>{example.scenario_description} Candidate routes and business values are illustrative, not live logistics data.</p></div>
+          </div>
+          <div className="quantum-route-summary">
+            <div><span>Shipments</span><strong>{example.shipment_ids.join(" · ")}</strong></div>
+            <div><span>Candidate routes</span><strong>{Object.values(example.candidates).reduce((sum, routes) => sum + routes.length, 0)}</strong></div>
+            <div><span>Decision variables</span><strong>{example.decision_variable_count}</strong></div>
+            <div><span>Capacity slack bits</span><strong>{example.slack_variable_count}</strong></div>
+            <div><span>Total / current limit</span><strong>{example.variable_count} / {example.variable_limit}</strong></div>
+          </div>
+          <div className="quantum-route-grid">
+            <form className="quantum-run-form" onSubmit={run}>
+              <label className="quantum-route-label">Solver
+                <select value={selectedBackend} onChange={(event) => setSelectedBackend(event.target.value)} disabled={running}>
+                  {methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}
+                </select>
+                <small>{selectedMethod?.description ?? "Select a reported available execution method."}</small>
+              </label>
+              {example.available_methods.some((method) =>
+                (method.id === "qiskit" || method.id === "qulacs") && !method.available,
+              ) && <p className="quantum-unavailable-note">
+                Optional quantum backends unavailable here: {example.available_methods
+                  .filter((method) => (method.id === "qiskit" || method.id === "qulacs") && !method.available)
+                  .map((method) => method.name).join(", ")}. They are not silently substituted.
+              </p>}
+              {selectedCapability?.available && <div className="quantum-control-grid quantum-route-qaoa-controls">
+                <label>Depth p<input type="number" min={depthRange.min} max={depthRange.max} value={depth} onChange={(event) => setDepth(Number(event.target.value))} disabled={!depthRange.valid || running} /></label>
+                <label>Optimizer<select value={optimizer} onChange={(event) => setOptimizer(event.target.value as "spsa" | "coordinate")} disabled={!optimizerChoices.length || running}>{optimizerChoices.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                <label>Iteration limit<input type="number" min={iterationRange.min} max={iterationRange.max} value={iterations} onChange={(event) => setIterations(Number(event.target.value))} disabled={!iterationRange.valid || running} /></label>
+                <label>Shots per evaluation<input type="number" min={shotsRange.min} max={shotsRange.max} value={shots} onChange={(event) => setShots(Number(event.target.value))} disabled={!shotsRange.valid || running} /></label>
+                <label>Random seed<input type="number" min={seedRange.min} max={seedRange.max} value={seed} onChange={(event) => setSeed(Number(event.target.value))} disabled={!seedRange.valid || running} /></label>
+              </div>}
+              {selectedCapability?.available && !selectedConfigurationValid && <p className="quantum-unavailable-note" role="alert">The selected backend did not report supported values for the current QAOA configuration.</p>}
+              <div className="quantum-route-weights">
+                <strong>QBO objective weights · {weightsTotal}%</strong>
+                {(["cost", "delivery_time", "carbon", "resilience"] as const).map((key) => (
+                  <label key={key}>{key.replaceAll("_", " ")} (%)
+                    <input type="number" min={0} max={100} value={weights[key]} onChange={(event) => setWeights((current) => ({ ...current, [key]: Number(event.target.value) }))} disabled={running} />
+                  </label>
+                ))}
+                {weightsTotal !== 100 && <small className="quantum-unavailable-note" role="alert">Objective weights must total exactly 100%.</small>}
+              </div>
+              {error && <div className="quantum-run-error" role="alert">{error}</div>}
+              <button className="primary-button quantum-run-button" type="submit" disabled={running || !selectedMethod?.available || !selectedConfigurationValid || weightsTotal !== 100}>
+                {running ? "Executing route assignment…" : selectedBackend === "exact-qubo" ? "Run exact QUBO reference" : selectedBackend === "classical-assignment" ? "Run classical assignment" : `Run QAOA on ${selectedMethod?.name ?? "backend"}`}
+              </button>
+              {!selectedMethod?.available && <p className="quantum-unavailable-note">No execution is submitted. This backend is unavailable in the API environment.</p>}
+              {selectedCapability && <p className="quantum-unavailable-note">Optional SDK execution is local to the API process. No remote quantum service or Fujitsu QARP is involved.</p>}
+            </form>
+            <div className="quantum-result-area" aria-live="polite">
+              {!result && !running && <div className="quantum-empty-state"><strong>No route-assignment run yet</strong><p>Choose an available solver and execute the same generated candidate set used by the exact reference.</p></div>}
+              {running && <div className="quantum-empty-state"><strong>Route assignment running</strong><p>Exact enumeration checks all binary assignments in the 12-variable supported range.</p></div>}
+              {result && <div className="quantum-result">
+                <div className="quantum-result-heading"><div><strong>{result.backend_name}</strong><small>{result.variable_count} variables · {result.execution_mode} · {result.timing_scope}</small></div><Badge tone={result.feasible ? "good" : result.feasible === false ? "bad" : "warn"}>{result.feasible ? "Feasible" : result.feasible === false ? "Infeasible sample" : result.status}</Badge></div>
+                <div className="quantum-result-kpis">
+                  <div><span>Weighted business objective</span><strong>{formatDistance(result.business_metrics?.weighted_objective)}</strong></div>
+                  <div><span>Full penalized energy</span><strong>{formatDistance(result.full_penalized_energy)}</strong></div>
+                  <div><span>Exact reference objective</span><strong>{result.exact_reference_feasible ? formatDistance(result.exact_reference_objective) : "No feasible reference"}</strong></div>
+                  <div><span>Gap to exact candidate optimum</span><strong>{result.objective_gap_percent === null ? "Unavailable" : `${formatNumber(result.objective_gap_percent, 2)}%`}</strong></div>
+                </div>
+                {result.error && <div className="quantum-run-error" role="alert">{result.error}{result.error_category ? ` · ${result.error_category}` : ""}</div>}
+                <div className="quantum-result-meta">
+                  <span>Freight {formatDistance(result.business_metrics?.freight_cost)} synthetic cost units</span>
+                  <span>Delivery {formatDistance(result.business_metrics?.delivery_time)} days</span>
+                  <span>Carbon {formatDistance(result.business_metrics?.carbon_kg)} kg CO₂e</span>
+                  <span>Resilience exposure {formatDistance(result.business_metrics?.resilience_exposure)}</span>
+                  <span>QUBO energy {formatDistance(result.qubo_energy)} · Ising full energy {formatDistance(result.ising_energy)}</span>
+                  <span>Exact-reference full energy {formatDistance(result.exact_reference_full_energy)} (offset restored)</span>
+                  <span>Execution {formatNumber(result.elapsed_seconds, 3)} s · exact reference {formatNumber(result.exact_reference_seconds, 3)} s</span>
+                  {result.optimizer && <span>QAOA {result.optimizer} · {result.optimizer_iterations ?? 0} optimizer iterations · {result.shots ?? 0} shots · seed {result.random_seed}</span>}
+                  {Object.entries(result.capacity_usage).map(([link, load]) => <span key={link}>{link}: {load} load units ({formatNumber((result.capacity_utilization[link] ?? 0) * 100, 1)}% capacity)</span>)}
+                </div>
+                {result.decoded_routes && <div className="quantum-decoded-plan"><strong>Independently validated shipment routes</strong>{Object.entries(result.decoded_routes).map(([shipment, route]) => <span key={shipment}>{shipment}: {route}</span>)}</div>}
+                {result.exact_reference_routes && <div className="quantum-decoded-plan"><strong>Exact QUBO reference routes</strong>{Object.entries(result.exact_reference_routes).map(([shipment, route]) => <span key={shipment}>{shipment}: {route}</span>)}</div>}
+                {result.classical_reference_routes && <div className="quantum-decoded-plan"><strong>Classical candidate-assignment reference</strong>{Object.entries(result.classical_reference_routes).map(([shipment, route]) => <span key={shipment}>{shipment}: {route}</span>)}</div>}
+                {result.feasibility_violations.length > 0 && <div className="quantum-run-error">{result.feasibility_violations.join("; ")}</div>}
+                <details className="quantum-formulation-details"><summary>Inspect formulation, candidate routes and coefficients</summary>
+                  <p>Penalty: {formatDistance(result.infeasibility_penalty)} · separately preserved offset: {formatDistance(result.qubo_offset)} · reference: {result.reference_scope}</p>
+                  <div><strong>Canonical variable register</strong>{result.variable_mapping.map((item) => <p key={item.variable}><code>{item.variable}</code> · {item.kind === "route_choice" ? `${item.shipment_id} selects ${item.route_id}` : `${item.link_id} capacity slack, weight ${item.slack_weight}`}</p>)}</div>
+                  {example.shipment_ids.map((shipment) => <div key={shipment}><strong>{shipment} candidates</strong>{example.candidates[shipment].map((candidate) => <p key={candidate.id}><code>{candidate.id}</code> · {candidate.modes.join(" → ")} · cost {formatDistance(candidate.freight_cost)} · {formatDistance(candidate.transit_time)} days</p>)}</div>)}
+                  <div className="table-scroll quantum-coefficient-scroll" role="region" aria-label="QUBO coefficients" tabIndex={0}><table className="quantum-sample-table"><thead><tr><th>Variable i</th><th>Variable j</th><th>Q[i,j]</th></tr></thead><tbody>{result.qubo_coefficients.map(([left, right, value], index) => <tr key={`${left}-${right}-${index}`}><td><code>{left}</code></td><td><code>{right}</code></td><td>{formatDistance(value)}</td></tr>)}</tbody></table></div>
+                </details>
+              </div>}
+            </div>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
 function QuantumComputing({
   capabilities,
 }: {
@@ -2039,15 +2230,16 @@ function QuantumComputing({
           </div>
           <div>
             <span className="foundation-num">03</span>
-            <strong>Quantum adapters</strong>
+            <strong>Quantum backend adapters</strong>
             <p>
-              Separate backend adapters, experiment execution and quantum result
-              provenance.
+              Qiskit and Qulacs QAOA adapters are implemented; execution depends on
+              each optional SDK being available in the API environment.
             </p>
-            <Badge>Planned</Badge>
+            <Badge tone="good">Implemented</Badge>
           </div>
         </div>
       </Panel>
+      <RouteQUBOWorkspace capabilities={capabilities} />
     </>
   );
 }

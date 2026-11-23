@@ -4,6 +4,7 @@ from pathlib import Path
 import csv
 from io import StringIO
 import json
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Response
@@ -31,7 +32,16 @@ from qsupply.network.global_demo import (
     global_demo_shipments,
 )
 from qsupply.network.models import DisruptionScenario
-from qsupply.network.planning import RecoverySearchLimitError
+from qsupply.network.planning import ObjectiveWeights, RecoverySearchLimitError, assign_routes
+from qsupply.network.route_qubo import (
+    MAX_ROUTE_QUBO_VARIABLES,
+    RouteAssignmentQUBO,
+    RouteBusinessMetrics,
+)
+from qsupply.network.route_qubo_demo import (
+    ROUTE_QUBO_DEMO_SCENARIO,
+    build_route_qubo_demo,
+)
 
 from .global_service import (
     generate_shipment_routes,
@@ -75,6 +85,14 @@ from .schemas import (
     QuantumBackendCapability,
     QuantumSampleEnergy,
     QuantumSampleFrequency,
+    RouteQUBOCandidate,
+    ObjectiveWeightsInput,
+    RouteQUBOBackendOption,
+    RouteQUBOExampleResponse,
+    RouteQUBOMetrics,
+    RouteQUBORunRequest,
+    RouteQUBORunResponse,
+    RouteQUBOVariableMapping,
     RunCreateRequest,
     RunListResponse,
     RunRecord,
@@ -89,6 +107,28 @@ from .storage import create_run_store
 
 def _energy_text(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+def _route_qubo_variable_mapping(
+    formulation: RouteAssignmentQUBO,
+) -> list[RouteQUBOVariableMapping]:
+    mapped: dict[str, RouteQUBOVariableMapping] = {}
+    for (shipment_id, route_id), variable in formulation.route_variables.items():
+        mapped[variable] = RouteQUBOVariableMapping(
+            variable=variable,
+            kind="route_choice",
+            shipment_id=shipment_id,
+            route_id=route_id,
+        )
+    for link_id, bits in formulation.slack_variables.items():
+        for variable, weight in bits:
+            mapped[variable] = RouteQUBOVariableMapping(
+                variable=variable,
+                kind="capacity_slack",
+                link_id=link_id,
+                slack_weight=weight,
+            )
+    return [mapped[name] for name in formulation.variable_order]
 
 
 def _backend_integration_description(backend: dict[str, object]) -> str:
@@ -173,10 +213,10 @@ def create_app(
                 ),
             ],
             features=[
-                CapabilityStatus(id="qubo-formulation", status="available", description="QUBO energy evaluation and import-export QUBO formulation; no general QUBO solver."),
+                CapabilityStatus(id="qubo-formulation", status="available", description="QUBO energy evaluation, import-export formulation, and a bounded multimodal route-assignment QUBO bridge; no general-purpose QUBO solver."),
                 CapabilityStatus(id="cvrp", status="available", description="CVRP model, heuristic, exact solver, and CVRP benchmarks."),
                 CapabilityStatus(id="multimodal-network-models", status="available", description="Validated geospatial network, link, shipment, and disruption models."),
-                CapabilityStatus(id="multimodal-route-optimization", status="available_demo", description="Bounded candidate-route generation and capacity-aware assignment on the labelled synthetic network; no general production solver."),
+                CapabilityStatus(id="multimodal-route-optimization", status="available_demo", description="Bounded candidate-route generation, classical assignment, and a small QUBO/QAOA bridge on labelled synthetic data; no general production optimizer."),
                 CapabilityStatus(id="milp", status="unavailable", description="No MILP adapter is implemented."),
             ],
             integrations=integrations,
@@ -364,6 +404,347 @@ def create_app(
             circuit_execution_time_seconds=result.circuit_execution_time_seconds,
             elapsed_seconds=result.execution_time_seconds,
             error=result.error,
+        )
+
+    @app.get(
+        "/api/v1/quantum/route-assignment/example",
+        response_model=RouteQUBOExampleResponse,
+        tags=["quantum", "global-optimization"],
+    )
+    def route_assignment_qubo_example() -> RouteQUBOExampleResponse:
+        try:
+            formulation, _ = build_route_qubo_demo()
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        methods = [
+            {"id": "exact-qubo", "name": "Exact QUBO enumeration", "available": True,
+             "description": "Exhaustive minimum of the penalized route-assignment QUBO."},
+            {"id": "classical-assignment", "name": "Classical exact assignment", "available": True,
+             "description": "Capacity-aware enumeration over the same generated candidate routes."},
+        ]
+        methods.extend(
+            {
+                "id": capability["id"],
+                "name": capability["name"],
+                "available": capability["available"],
+                "description": capability["description"],
+            }
+            for capability in backend_registry.capabilities()
+        )
+        profiles = {profile.request.id: profile for profile in formulation.profiles}
+        return RouteQUBOExampleResponse(
+            scenario_id=ROUTE_QUBO_DEMO_SCENARIO.id,
+            scenario_description=(
+                "Synthetic restriction: Shanghai port-road access capacity is reduced "
+                "from 30 to 3 load units."
+            ),
+            shipment_ids=list(profiles),
+            candidates={
+                shipment_id: [
+                    RouteQUBOCandidate(
+                        id=route.id,
+                        modes=[mode.value for mode in route.modes],
+                        link_ids=[leg.link_id for leg in route.legs],
+                        freight_cost=str(route.freight_cost),
+                        transit_time=str(route.transit_time),
+                        carbon_kg=str(route.carbon_kg),
+                        resilience_exposure=str(route.resilience_exposure),
+                    )
+                    for route in routes
+                ]
+                for shipment_id, routes in formulation.candidates.items()
+            },
+            variable_order=list(formulation.variable_order),
+            variable_kinds=dict(formulation.variable_kinds),
+            variable_mapping=_route_qubo_variable_mapping(formulation),
+            decision_variable_count=formulation.decision_variable_count,
+            slack_variable_count=formulation.slack_variable_count,
+            variable_count=formulation.variable_count,
+            variable_limit=MAX_ROUTE_QUBO_VARIABLES,
+            qubo_coefficients=[
+                (left, right, str(value))
+                for (left, right), value in formulation.qubo.coefficients.items()
+            ],
+            qubo_offset=str(formulation.offset),
+            infeasibility_penalty=str(formulation.penalty),
+            normalization_references={
+                "cost": str(formulation.normalization_references.cost),
+                "delivery_time": str(formulation.normalization_references.delivery_time),
+                "carbon": str(formulation.normalization_references.carbon),
+                "resilience": str(formulation.normalization_references.resilience),
+            },
+            weights=ObjectiveWeightsInput(),
+            available_methods=[RouteQUBOBackendOption(**method) for method in methods],
+        )
+
+    @app.post(
+        "/api/v1/quantum/route-assignment/runs",
+        response_model=RouteQUBORunResponse,
+        status_code=201,
+        tags=["quantum", "global-optimization"],
+    )
+    def run_route_assignment_qubo(request: RouteQUBORunRequest) -> RouteQUBORunResponse:
+        weights = ObjectiveWeights(**request.weights.model_dump())
+        try:
+            formulation, comparison = build_route_qubo_demo(weights)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+        exact_started = perf_counter()
+        exact_result = ExactQUBOSolver().solve(
+            formulation.solver_request(ProblemRepresentation.QUBO)
+        )
+        exact_seconds = perf_counter() - exact_started
+        exact_routes = (
+            dict(exact_result.decoded_solution)
+            if exact_result.feasible and exact_result.decoded_solution is not None
+            else None
+        )
+        exact_objective = exact_result.business_objective
+
+        backend_id = request.backend
+        backend_name = backend_id
+        execution_mode = "local_classical"
+        timing_scope = "solver execution, including its own validation callbacks"
+        selected_assignment = None
+        selected_result = None
+        selected_elapsed = 0.0
+        selected_depth = None
+        selected_shots = None
+        selected_optimizer = None
+        selected_iterations = None
+
+        if backend_id == "exact-qubo":
+            selected_result = exact_result
+            selected_assignment = exact_result.best_binary_assignment
+            backend_name = exact_result.solver_name
+            selected_elapsed = exact_result.execution_time_seconds
+            timing_scope = "exhaustive QUBO enumeration and solver validation callbacks"
+        elif backend_id == "classical-assignment":
+            classical_started = perf_counter()
+            classical = assign_routes(
+                formulation.network,
+                formulation.profiles,
+                comparison.recovery_candidates,
+                formulation.weights,
+                formulation.normalization_references,
+                formulation.scenario,
+            )
+            selected_elapsed = perf_counter() - classical_started
+            if classical is not None:
+                selected_assignment = formulation.encode_plan(
+                    {shipment_id: route.id for shipment_id, route in classical.routes.items()}
+                )
+            backend_name = "Capacity-aware exact candidate assignment"
+            timing_scope = "candidate assignment search and independent plan validation"
+        else:
+            try:
+                registration = backend_registry.get(backend_id)
+            except UnknownQuantumBackendError as error:
+                raise HTTPException(
+                    status_code=422, detail=f"Unknown quantum backend {backend_id!r}."
+                ) from error
+            configuration = {
+                "depth": request.depth,
+                "optimizer": request.optimizer,
+                "max_iterations": request.max_iterations,
+                "shots": request.shots,
+                "random_seed": request.random_seed,
+            }
+            errors = registration.configuration_errors(configuration)
+            if errors:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Unsupported configuration for selected backend: " + "; ".join(errors),
+                )
+            if not registration.is_available():
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        f"{registration.optional_dependency} is unavailable; install "
+                        f"{registration.dependency_requirements} in the API environment."
+                    ),
+                )
+            qaoa_config = QAOAConfig(
+                depth=request.depth,
+                optimizer=request.optimizer,
+                max_iterations=request.max_iterations,
+                shots=request.shots,
+                random_seed=request.random_seed,
+            )
+            selected_result = registration.solver_factory(qaoa_config).solve(
+                formulation.solver_request(ProblemRepresentation.ISING)
+            )
+            selected_assignment = selected_result.best_binary_assignment
+            selected_elapsed = selected_result.execution_time_seconds
+            backend_name = registration.name
+            execution_mode = registration.execution_mode.value
+            timing_scope = (
+                selected_result.execution_metadata.timing_scope
+                if selected_result.execution_metadata is not None
+                and selected_result.execution_metadata.timing_scope
+                else "backend solver execution; see backend metadata for measured timing scope"
+            )
+            selected_depth = request.depth
+            selected_shots = request.shots
+            selected_optimizer = request.optimizer
+            selected_iterations = selected_result.optimizer_iterations
+
+        evaluation = (
+            formulation.evaluate_assignment(selected_assignment)
+            if selected_assignment is not None
+            else None
+        )
+        if selected_result is not None and evaluation is not None:
+            if selected_result.full_energy != evaluation.full_penalized_energy:
+                try:
+                    agrees = abs(float(selected_result.full_energy) - float(evaluation.full_penalized_energy)) <= 1e-9
+                except (TypeError, ValueError, OverflowError):
+                    agrees = False
+                if not agrees:
+                    raise HTTPException(status_code=500, detail="solver energy does not reconcile with the original route QUBO")
+
+        selected_objective = (
+            None if evaluation is None or evaluation.business_metrics is None
+            else evaluation.business_metrics.weighted_objective
+        )
+        exact_feasible = exact_result.feasible is True
+        objective_gap = None
+        if (
+            selected_objective is not None
+            and exact_objective is not None
+            and exact_objective != 0
+        ):
+            objective_gap = float(
+                (selected_objective - exact_objective) / abs(exact_objective) * 100
+            )
+        selected_routes = (
+            dict(evaluation.feasibility.selected_routes)
+            if evaluation is not None and evaluation.feasibility.feasible
+            else None
+        )
+        route_lookup = {
+            profile.request.id: {route.id: route for route in formulation.candidates[profile.request.id]}
+            for profile in formulation.profiles
+        }
+        route_details = {
+            shipment_id: RouteQUBOCandidate(
+                id=route_id,
+                modes=[mode.value for mode in route_lookup[shipment_id][route_id].modes],
+                link_ids=[leg.link_id for leg in route_lookup[shipment_id][route_id].legs],
+                freight_cost=str(route_lookup[shipment_id][route_id].freight_cost),
+                transit_time=str(route_lookup[shipment_id][route_id].transit_time),
+                carbon_kg=str(route_lookup[shipment_id][route_id].carbon_kg),
+                resilience_exposure=str(route_lookup[shipment_id][route_id].resilience_exposure),
+            )
+            for shipment_id, route_id in (selected_routes or {}).items()
+        }
+        metrics = evaluation.business_metrics if evaluation is not None else None
+        classical_reference_objective = None
+        if comparison.recovery is not None:
+            classical_reference_objective = formulation.evaluate_business_objective(
+                {
+                    shipment_id: route.id
+                    for shipment_id, route in comparison.recovery.routes.items()
+                }
+            ).weighted_objective
+
+        def metric_response(value: RouteBusinessMetrics | None) -> RouteQUBOMetrics | None:
+            if value is None:
+                return None
+            return RouteQUBOMetrics(
+                freight_cost=str(value.freight_cost),
+                delay_penalty=str(value.delay_penalty),
+                total_cost=str(value.total_cost),
+                delivery_time=str(value.delivery_time),
+                carbon_kg=str(value.carbon_kg),
+                resilience_exposure=str(value.resilience_exposure),
+                weighted_objective=str(value.weighted_objective),
+            )
+
+        return RouteQUBORunResponse(
+            run_id=selected_result.run_id if selected_result is not None else str(uuid4()),
+            status=(selected_result.status.value if selected_result is not None else "completed"),
+            backend_id=backend_id,
+            backend_name=backend_name,
+            backend_version=(selected_result.backend_version if selected_result is not None else None),
+            execution_mode=execution_mode,
+            timing_scope=timing_scope,
+            elapsed_seconds=selected_elapsed,
+            scenario_id=ROUTE_QUBO_DEMO_SCENARIO.id,
+            shipment_ids=[profile.request.id for profile in formulation.profiles],
+            variable_count=formulation.variable_count,
+            decision_variable_count=formulation.decision_variable_count,
+            slack_variable_count=formulation.slack_variable_count,
+            depth=selected_depth,
+            shots=selected_shots,
+            random_seed=request.random_seed if selected_depth is not None else None,
+            optimizer=selected_optimizer,
+            optimizer_iterations=selected_iterations,
+            execution_metadata=(
+                QuantumExecutionMetadata(
+                    backend_id=selected_result.execution_metadata.backend_id,
+                    backend_name=selected_result.execution_metadata.backend_name,
+                    backend_version=selected_result.execution_metadata.backend_version,
+                    execution_mode=selected_result.execution_metadata.execution_mode.value,
+                    timing_scope=selected_result.execution_metadata.timing_scope,
+                    timings=QuantumExecutionTimings(
+                        submission_seconds=selected_result.execution_metadata.timings.submission_seconds,
+                        queue_seconds=selected_result.execution_metadata.timings.queue_seconds,
+                        remote_execution_seconds=selected_result.execution_metadata.timings.remote_execution_seconds,
+                        result_retrieval_seconds=selected_result.execution_metadata.timings.result_retrieval_seconds,
+                    ),
+                    attributes=dict(selected_result.execution_metadata.attributes),
+                )
+                if selected_result is not None and selected_result.execution_metadata is not None
+                else None
+            ),
+            error=(selected_result.error if selected_result is not None else None),
+            error_category=(
+                selected_result.error_details.category.value
+                if selected_result is not None and selected_result.error_details is not None
+                else None
+            ),
+            variable_order=list(formulation.variable_order),
+            variable_kinds=dict(formulation.variable_kinds),
+            variable_mapping=_route_qubo_variable_mapping(formulation),
+            qubo_coefficients=[
+                (left, right, str(value))
+                for (left, right), value in formulation.qubo.coefficients.items()
+            ],
+            qubo_offset=str(formulation.offset),
+            infeasibility_penalty=str(formulation.penalty),
+            best_binary_assignment=(dict(selected_assignment) if selected_assignment is not None else None),
+            qubo_energy=(str(evaluation.qubo_energy) if evaluation is not None else None),
+            full_penalized_energy=(str(evaluation.full_penalized_energy) if evaluation is not None else None),
+            ising_energy=(str(selected_result.ising_energy) if selected_result is not None and selected_result.ising_energy is not None else None),
+            feasible=(evaluation.feasibility.feasible if evaluation is not None else None),
+            feasibility_violations=(list(evaluation.feasibility.violations) if evaluation is not None else []),
+            decoded_routes=selected_routes,
+            route_details=route_details,
+            capacity_usage=(dict(evaluation.feasibility.capacity_usage) if evaluation is not None else {}),
+            capacity_utilization=(dict(evaluation.feasibility.capacity_utilization) if evaluation is not None else {}),
+            business_metrics=metric_response(metrics),
+            objective_gap_percent=objective_gap,
+            exact_reference_objective=(str(exact_objective) if exact_objective is not None else None),
+            exact_reference_qubo_energy=str(exact_result.qubo_energy),
+            exact_reference_full_energy=str(exact_result.full_energy),
+            exact_reference_feasible=exact_feasible,
+            exact_reference_routes=exact_routes,
+            exact_reference_seconds=exact_seconds,
+            classical_reference_objective=(
+                str(classical_reference_objective)
+                if classical_reference_objective is not None else None
+            ),
+            classical_reference_feasible=comparison.recovery_feasible,
+            classical_reference_routes=(
+                {
+                    shipment_id: route.id
+                    for shipment_id, route in comparison.recovery.routes.items()
+                }
+                if comparison.recovery is not None else None
+            ),
+            reference_scope="exact optimum over the explicitly generated three candidate routes per shipment under fixed baseline normalization",
         )
 
     @app.get("/api/v1/instances", response_model=list[InstanceSummary], tags=["cvrp"])
