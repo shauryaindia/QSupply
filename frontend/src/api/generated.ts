@@ -1466,6 +1466,10 @@ export interface components {
             timing_scope: string;
             /** Elapsed Seconds */
             elapsed_seconds: number;
+            /** Optimization Time Seconds */
+            optimization_time_seconds?: number | null;
+            /** Circuit Execution Time Seconds */
+            circuit_execution_time_seconds?: number | null;
             /**
              * Synthetic
              * @default true

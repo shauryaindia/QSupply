@@ -1917,7 +1917,10 @@ function RouteQUBOWorkspace({ capabilities }: { capabilities: Capabilities | nul
                   <span>QUBO energy {formatDistance(result.qubo_energy)} · Ising full energy {formatDistance(result.ising_energy)}</span>
                   <span>Exact-reference full energy {formatDistance(result.exact_reference_full_energy)} (offset restored)</span>
                   <span>Execution {formatNumber(result.elapsed_seconds, 3)} s · exact reference {formatNumber(result.exact_reference_seconds, 3)} s</span>
-                  {result.optimizer && <span>QAOA {result.optimizer} · {result.optimizer_iterations ?? 0} optimizer iterations · {result.shots ?? 0} shots · seed {result.random_seed}</span>}
+                  {result.optimizer && <>
+                    <span>QAOA {result.optimizer} · {result.optimizer_iterations ?? 0} optimizer iterations · {result.shots ?? 0} shots · seed {result.random_seed}</span>
+                    <span>QAOA optimizer wall time {formatNumber(result.optimization_time_seconds, 3)} s · accumulated simulator sample calls {formatNumber(result.circuit_execution_time_seconds, 3)} s (overlapping measurements)</span>
+                  </>}
                   {Object.entries(result.capacity_usage).map(([link, load]) => <span key={link}>{link}: {load} load units ({formatNumber((result.capacity_utilization[link] ?? 0) * 100, 1)}% capacity)</span>)}
                 </div>
                 {result.decoded_routes && <div className="quantum-decoded-plan"><strong>Independently validated shipment routes</strong>{Object.entries(result.decoded_routes).map(([shipment, route]) => <span key={shipment}>{shipment}: {route}</span>)}</div>}

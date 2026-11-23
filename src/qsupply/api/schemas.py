@@ -407,6 +407,8 @@ class RouteQUBORunResponse(BaseModel):
     execution_mode: str
     timing_scope: str
     elapsed_seconds: float
+    optimization_time_seconds: float | None = None
+    circuit_execution_time_seconds: float | None = None
     synthetic: bool = True
     scenario_id: str
     shipment_ids: list[str]

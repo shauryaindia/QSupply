@@ -69,6 +69,9 @@ class QuantumBenchmarkRecord:
     requested_seed: int | None = None
     seed_applied: bool | None = None
     run_index: int | None = None
+    optimization_time_seconds: float | None = None
+    circuit_execution_time_seconds: float | None = None
+    decoded_solution: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -333,6 +336,9 @@ def _records_for_runs(
                     result.random_seed == seeds[0] if seeds[0] is not None else None
                 ),
                 run_index=run_index,
+                optimization_time_seconds=result.optimization_time_seconds,
+                circuit_execution_time_seconds=result.circuit_execution_time_seconds,
+                decoded_solution=result.decoded_solution,
             )
         )
     return tuple(records)
@@ -380,6 +386,7 @@ def _exact_record(
         timing_scope="whole exact solver call (single measurement)",
         feasible_reference_enumeration_time_seconds=feasible_reference_enumeration_seconds,
         requested_seed=request.random_seed,
+        decoded_solution=exact.decoded_solution,
     )
 
 

@@ -274,6 +274,37 @@ class TestRouteAssignmentQUBO(unittest.TestCase):
         self.assertEqual(evaluation.full_penalized_energy, result.full_energy)
         self.assertEqual(evaluation.feasibility.feasible, result.feasible)
 
+    @unittest.skipUnless(
+        QiskitBackend.is_available() and QulacsBackend.is_available(),
+        "Qiskit and Qulacs SDKs are both required for cross-backend route execution",
+    )
+    def test_qiskit_and_qulacs_route_samples_use_same_qubo_and_domain_validation(self):
+        request = self.formulation.solver_request(ProblemRepresentation.ISING)
+        config = QAOAConfig(depth=1, max_iterations=1, shots=24, random_seed=31415)
+        results = (
+            QiskitQAOASolver(config).solve(request),
+            QulacsQAOASolver(config).solve(request),
+        )
+        for result in results:
+            with self.subTest(backend=result.backend_name):
+                self.assertEqual(result.status, ExecutionStatus.COMPLETED)
+                self.assertEqual(result.variable_order, self.formulation.variable_order)
+                assignment = result.best_binary_assignment
+                self.assertEqual(
+                    result.qubo_energy, self.formulation.qubo.energy(assignment)
+                )
+                evaluation = self.formulation.evaluate_assignment(assignment)
+                self.assertEqual(result.full_energy, evaluation.full_penalized_energy)
+                self.assertEqual(result.ising_energy, result.full_energy)
+                self.assertEqual(result.feasible, evaluation.feasibility.feasible)
+                if result.feasible:
+                    self.assertEqual(
+                        result.business_objective,
+                        evaluation.business_metrics.weighted_objective,
+                    )
+                else:
+                    self.assertTrue(evaluation.feasibility.violations)
+
     @unittest.skipUnless(QiskitBackend.is_available(), "optional Qiskit SDK unavailable")
     def test_qiskit_qaoa_executes_route_qubo_and_reconciles_original_energy(self):
         result = QiskitQAOASolver(

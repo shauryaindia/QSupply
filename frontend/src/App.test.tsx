@@ -486,6 +486,65 @@ describe("QSupply dashboard interactions", () => {
     expect(screen.getByText("Synthetic disruption · synthetic-route-qubo-shanghai-access-capacity")).toBeInTheDocument();
   });
 
+  it("shows measured QAOA simulator timing separately from total run time", async () => {
+    const user = userEvent.setup();
+    const example = await api.routeQUBOExample();
+    vi.mocked(api.routeQUBOExample).mockResolvedValue({
+      ...example,
+      available_methods: example.available_methods.map((method) =>
+        method.id === "qiskit" ? { ...method, available: true } : method,
+      ),
+    });
+    const capabilities = await api.capabilities();
+    vi.mocked(api.capabilities).mockResolvedValue({
+      ...capabilities,
+      backends: (capabilities.backends ?? []).map((backend) =>
+        backend.id === "qiskit"
+          ? {
+              ...backend,
+              available: true,
+              supported_configuration: {
+                depth: { minimum: 1, maximum: 3 },
+                optimizer: { values: ["spsa", "coordinate"] },
+                max_iterations: { minimum: 1, maximum: 25 },
+                shots: { minimum: 16, maximum: 2048 },
+                random_seed: { minimum: 0, maximum: 2147483647 },
+              },
+            }
+          : backend,
+      ),
+    });
+    const result = await api.runRouteQUBO({
+      backend: "exact-qubo",
+      depth: 1,
+      optimizer: "spsa",
+      max_iterations: 1,
+      shots: 16,
+      random_seed: 31415,
+    });
+    vi.mocked(api.runRouteQUBO).mockResolvedValue({
+      ...result,
+      backend_id: "qiskit",
+      backend_name: "Qiskit StatevectorSampler",
+      optimizer: "spsa",
+      optimizer_iterations: 1,
+      shots: 16,
+      random_seed: 31415,
+      optimization_time_seconds: 0.12,
+      circuit_execution_time_seconds: 0.04,
+    });
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
+    await user.selectOptions(await screen.findByLabelText(/Solver/), "qiskit");
+    await user.click(screen.getByRole("button", { name: "Run QAOA on Qiskit" }));
+
+    expect(await screen.findByText(/QAOA optimizer wall time 0\.12 s/)).toBeInTheDocument();
+    expect(screen.getByText(/accumulated simulator sample calls 0\.04 s/)).toBeInTheDocument();
+    expect(screen.getByText(/Execution .* s/)).toBeInTheDocument();
+  });
+
   it("loads a runnable named global demo and its explicit assignment scope", async () => {
     const shipment = {
       id: "EXP-104", origin_id: "shanghai-hub", origin_name: "Shanghai",

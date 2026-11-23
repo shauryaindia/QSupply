@@ -580,10 +580,8 @@ def create_app(
             backend_name = registration.name
             execution_mode = registration.execution_mode.value
             timing_scope = (
-                selected_result.execution_metadata.timing_scope
-                if selected_result.execution_metadata is not None
-                and selected_result.execution_metadata.timing_scope
-                else "backend solver execution; see backend metadata for measured timing scope"
+                "whole QAOA solver call including optimization, sample calls, energy "
+                "rescoring and domain validation; see execution_metadata for backend sample-call scope"
             )
             selected_depth = request.depth
             selected_shots = request.shots
@@ -671,6 +669,16 @@ def create_app(
             execution_mode=execution_mode,
             timing_scope=timing_scope,
             elapsed_seconds=selected_elapsed,
+            optimization_time_seconds=(
+                selected_result.optimization_time_seconds
+                if selected_result is not None and selected_depth is not None
+                else None
+            ),
+            circuit_execution_time_seconds=(
+                selected_result.circuit_execution_time_seconds
+                if selected_result is not None and selected_depth is not None
+                else None
+            ),
             scenario_id=ROUTE_QUBO_DEMO_SCENARIO.id,
             shipment_ids=[profile.request.id for profile in formulation.profiles],
             variable_count=formulation.variable_count,

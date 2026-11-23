@@ -12,6 +12,18 @@ classical assignment results over the same generated candidates, and shows a
 carbon-priority comparison on the synthetic disruption scenario. Exactness is
 limited to the candidate routes shown by that example.
 
+With the optional Qiskit and Qulacs requirements installed in an isolated
+environment, run:
+
+```sh
+PYTHONPATH=src /tmp/qsupply-quantum-venv/bin/python examples/benchmark_route_qubo.py
+```
+
+This emits JSON benchmark records for five explicit seeds, exact and classical
+references, both QAOA backends, per-run feasibility and timing scopes. See
+[`docs/quantum/route-assignment-qubo.md`](../docs/quantum/route-assignment-qubo.md)
+for the exact command, measurement definitions and limitations.
+
 Install optional Qulacs support with `python3 -m pip install -r
 requirements-quantum.txt`, then run `PYTHONPATH=src python3
 examples/qulacs_qaoa.py` for a seeded QAOA simulator run and exact classical

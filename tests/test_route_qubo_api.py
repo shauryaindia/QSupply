@@ -4,6 +4,8 @@ from tempfile import TemporaryDirectory
 from fastapi.testclient import TestClient
 
 from qsupply.api.app import create_app
+from qsupply.backends.qiskit import QiskitBackend
+from qsupply.backends.qulacs import QulacsBackend
 
 
 class TestRouteQUBOAPI(unittest.TestCase):
@@ -110,3 +112,46 @@ class TestRouteQUBOAPI(unittest.TestCase):
             json={"backend": "exact-qubo", "pretend_quantum_advantage": True},
         )
         self.assertEqual(extra.status_code, 422)
+
+    @unittest.skipUnless(
+        QiskitBackend.is_available() and QulacsBackend.is_available(),
+        "Qiskit and Qulacs SDKs are both required for API integration coverage",
+    )
+    def test_api_executes_route_qubo_on_both_available_qaoa_backends(self):
+        for backend in ("qiskit", "qulacs"):
+            with self.subTest(backend=backend):
+                response = self.client.post(
+                    "/api/v1/quantum/route-assignment/runs",
+                    json={
+                        "backend": backend,
+                        "depth": 1,
+                        "max_iterations": 1,
+                        "shots": 16,
+                        "random_seed": 2718,
+                    },
+                )
+                self.assertEqual(response.status_code, 201, response.text)
+                result = response.json()
+                self.assertEqual(result["status"], "completed")
+                self.assertEqual(result["backend_id"], backend)
+                self.assertEqual(result["execution_mode"], "local_simulator")
+                self.assertEqual(result["variable_count"], 8)
+                self.assertGreaterEqual(result["optimization_time_seconds"], 0)
+                self.assertGreaterEqual(result["circuit_execution_time_seconds"], 0)
+                self.assertIn("whole QAOA solver call", result["timing_scope"])
+                self.assertIn(
+                    "local sample-call wall time",
+                    result["execution_metadata"]["timing_scope"],
+                )
+                self.assertIsNotNone(result["best_binary_assignment"])
+                self.assertEqual(
+                    result["full_penalized_energy"], result["ising_energy"]
+                )
+                if result["feasible"]:
+                    self.assertTrue(result["decoded_routes"])
+                    self.assertIsNotNone(result["business_metrics"])
+                    self.assertIsNotNone(result["objective_gap_percent"])
+                else:
+                    self.assertIsNone(result["business_metrics"])
+                    self.assertIsNone(result["objective_gap_percent"])
+                    self.assertTrue(result["feasibility_violations"])

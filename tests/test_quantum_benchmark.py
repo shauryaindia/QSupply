@@ -43,6 +43,7 @@ class _RecordedQAOA:
             status=ExecutionStatus.COMPLETED, backend_name="Test state-vector simulator",
             backend_version="2", sample_count=64, sample_frequencies={(1, 0): 8},
             feasible_sample_rate=0.75, optimizer_iterations=3, circuit_depth=8,
+            optimization_time_seconds=0.003, circuit_execution_time_seconds=0.007,
         )
 
 
@@ -158,6 +159,8 @@ class TestQuantumBenchmark(unittest.TestCase):
         self.assertEqual(records[1].shots, 32)
         self.assertEqual(records[1].execution_mode, "local simulator execution")
         self.assertEqual(records[1].backend_type, BackendType.SIMULATOR)
+        self.assertEqual(records[1].optimization_time_seconds, 0.003)
+        self.assertEqual(records[1].circuit_execution_time_seconds, 0.007)
 
     def test_relative_gap_is_unavailable_when_exact_energy_is_zero(self):
         request = SolverRequest(QUBO(("a", "b"), {}))
@@ -258,6 +261,7 @@ class TestQuantumBenchmark(unittest.TestCase):
         self.assertEqual(summary.seeded_run_count, 3)
         self.assertEqual(summary.full_energy_statistics.count, 3)
         self.assertEqual(summary.business_objective_statistics.count, 3)
+        self.assertEqual(report.runs[0].decoded_solution, {"x": 0})
         self.assertIn("aggregate is the sum", summary.timing_scope)
         self.assertEqual(report.exact_reference.feasibility_status, "feasible")
 
