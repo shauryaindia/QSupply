@@ -515,12 +515,16 @@ function OptimizationWorkspace({
   onRunCreated,
   selectedRun,
   onSelectRun,
+  runStatusError,
+  onRetryRunStatus,
 }: {
   instances: InstanceSummary[];
   runs: RunRecord[];
   onRunCreated: (run: RunRecord) => void;
   selectedRun: RunRecord | null;
   onSelectRun: (run: RunRecord | null) => void;
+  runStatusError: string;
+  onRetryRunStatus: () => void;
 }) {
   const [instanceId, setInstanceId] = useState("synthetic-5");
   const [solver, setSolver] = useState<SolverId>("nearest-neighbor+2-opt");
@@ -698,7 +702,8 @@ function OptimizationWorkspace({
                     ? "Solver running"
                     : "Run queued"}
                 </strong>
-                <p>Checking the actual execution status…</p>
+                <p>{runStatusError || "Checking the actual execution status…"}</p>
+                {runStatusError && <button className="secondary-button" onClick={onRetryRunStatus}>Retry status check</button>}
               </div>
             ) : (
               <ResultDetails run={latestRun} />
@@ -2060,6 +2065,8 @@ export default function App() {
   const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null);
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [runStatusError, setRunStatusError] = useState("");
+  const [runStatusRetryToken, setRunStatusRetryToken] = useState(0);
 
   const refreshRuns = useCallback(async () => {
     const response = await api.runs();
@@ -2112,10 +2119,13 @@ export default function App() {
       return;
     let canceled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let consecutiveFailures = 0;
     const poll = async () => {
       try {
         const updated = await api.run(activeRun.id);
         if (canceled) return;
+        consecutiveFailures = 0;
+        setRunStatusError("");
         setActiveRun(updated);
         setSelectedRun(updated);
         await refreshRuns();
@@ -2126,15 +2136,14 @@ export default function App() {
         }
       } catch (cause) {
         if (!canceled) {
-          setActiveRun({
-            ...activeRun,
-            status: "failed",
-            error:
-              cause instanceof Error
-                ? cause.message
-                : "Lost connection while checking the run.",
-          });
-          setConnected(false);
+          consecutiveFailures += 1;
+          if (consecutiveFailures < 3) {
+            timer = setTimeout(poll, 500 * consecutiveFailures);
+          } else {
+            setRunStatusError(
+              `Run status could not be confirmed: ${cause instanceof Error ? cause.message : "temporary connection failure"}. The solver may still be running.`,
+            );
+          }
         }
       }
     };
@@ -2143,18 +2152,24 @@ export default function App() {
       canceled = true;
       clearTimeout(timer);
     };
-  }, [activeRun?.id, activeRun?.status, refreshRuns]);
+  }, [activeRun?.id, activeRun?.status, refreshRuns, runStatusRetryToken]);
 
   const createRun = (run: RunRecord) => {
+    setRunStatusError("");
     setActiveRun(run);
     setSelectedRun(run);
     setPage("workspace");
   };
   const openRun = (run: RunRecord) => {
+    setRunStatusError("");
     setSelectedRun(run);
     if (run.status !== "completed" && run.status !== "failed")
       setActiveRun(run);
     setPage("workspace");
+  };
+  const retryRunStatus = () => {
+    setRunStatusError("");
+    setRunStatusRetryToken((current) => current + 1);
   };
   const groupedNavigation = ["OPERATIONS", "INTELLIGENCE", "PLATFORM"];
 
@@ -2290,6 +2305,8 @@ export default function App() {
               onRunCreated={createRun}
               selectedRun={selectedRun}
               onSelectRun={setSelectedRun}
+              runStatusError={runStatusError}
+              onRetryRunStatus={retryRunStatus}
             />
           ) : page === "network" ? (
             <NetworkExplorer network={network} onRunsChange={setGlobalRuns} />

@@ -9,7 +9,9 @@ network failures and HTTP 408, 425, 429 or 5xx responses, with 300 ms and
 600 ms backoff between attempts. POST requests are never retried automatically
 to avoid duplicate optimization or scenario submissions. If initial connection
 attempts fail, the dashboard withholds API-backed views and provides a manual
-retry action.
+retry action. If CVRP run-status polling remains unavailable after its bounded
+retries, the dashboard reports that execution status is unconfirmed and offers
+a manual status check; it does not infer that the solver failed.
 
 ## Install and run
 

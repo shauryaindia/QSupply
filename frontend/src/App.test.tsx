@@ -483,6 +483,31 @@ describe("QSupply dashboard interactions", () => {
     });
   });
 
+  it("does not call an interrupted solver run failed and offers a status retry", async () => {
+    const user = userEvent.setup();
+    const queuedRun: RunRecord = { ...completedRun, status: "running", result: null };
+    vi.mocked(api.createRun).mockResolvedValue(queuedRun);
+    vi.mocked(api.run)
+      .mockRejectedValueOnce(new Error("temporary network interruption"))
+      .mockRejectedValueOnce(new Error("temporary network interruption"))
+      .mockRejectedValueOnce(new Error("temporary network interruption"))
+      .mockResolvedValueOnce(completedRun);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: /Optimization/ }),
+    );
+    await user.click(await screen.findByRole("button", { name: /Run optimization/ }));
+
+    const retry = await screen.findByRole("button", { name: "Retry status check" }, { timeout: 5000 });
+    expect(screen.getByText(/The solver may still be running/)).toBeInTheDocument();
+    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.queryByText("Optimization failed")).not.toBeInTheDocument();
+    await user.click(retry);
+    expect(await screen.findByText("Validated")).toBeInTheDocument();
+    expect(api.run).toHaveBeenCalledTimes(4);
+  });
+
   it("presents a depot-only route as an unused vehicle without altering the result", async () => {
     const user = userEvent.setup();
     const runWithUnusedVehicle: RunRecord = {
