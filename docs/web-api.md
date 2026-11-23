@@ -4,6 +4,13 @@ The FastAPI service exposes existing QSupply CVRP functionality to a local
 browser application. FastAPI is an optional adapter: importing or using the
 core `qsupply` package does not require web dependencies.
 
+The browser retries idempotent GET requests up to three times for transient
+network failures and HTTP 408, 425, 429 or 5xx responses, with 300 ms and
+600 ms backoff between attempts. POST requests are never retried automatically
+to avoid duplicate optimization or scenario submissions. If initial connection
+attempts fail, the dashboard withholds API-backed views and provides a manual
+retry action.
+
 ## Install and run
 
 From the repository root, install the optional service dependencies and run:

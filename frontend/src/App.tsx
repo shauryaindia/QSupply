@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -525,6 +526,7 @@ function OptimizationWorkspace({
   const [solver, setSolver] = useState<SolverId>("nearest-neighbor+2-opt");
   const [compare, setCompare] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submissionLock = useRef(false);
   const [error, setError] = useState("");
   const instance = instances.find((item) => item.id === instanceId);
   const exactAllowed = instance?.exact_supported ?? false;
@@ -534,6 +536,8 @@ function OptimizationWorkspace({
     null;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submissionLock.current || submitting) return;
+    submissionLock.current = true;
     setError("");
     setSubmitting(true);
     onSelectRun(null);
@@ -551,6 +555,7 @@ function OptimizationWorkspace({
           : "Could not create optimization run.",
       );
     } finally {
+      submissionLock.current = false;
       setSubmitting(false);
     }
   };
@@ -870,6 +875,7 @@ function NetworkExplorer({
   });
   const [objectiveProfile, setObjectiveProfile] = useState("balanced");
   const [loading, setLoading] = useState(false);
+  const optimizationSubmissionLock = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<
@@ -964,12 +970,15 @@ function NetworkExplorer({
     : [];
   const routeById = new Map([...routePool, ...planRoutes].map((route) => [route.id, route]));
   const rankedRouteIds = routeIntelligence?.rankings[routeRanking] ?? [];
-  const routes = [...routeById.values()].sort((left, right) => {
+  const orderedRoutes = [...routeById.values()].sort((left, right) => {
     const leftRank = rankedRouteIds.indexOf(left.id);
     const rightRank = rankedRouteIds.indexOf(right.id);
     return (leftRank < 0 ? Number.MAX_SAFE_INTEGER : leftRank) - (rightRank < 0 ? Number.MAX_SAFE_INTEGER : rightRank)
       || left.id.localeCompare(right.id);
   });
+  const routes = routeRanking === "pareto" && routeIntelligence
+    ? orderedRoutes.filter((route) => routeIntelligence.analyses[route.id]?.pareto_optimal)
+    : orderedRoutes;
   const selectedRoute = routes.find((route) => route.id === selectedRouteId) ?? routes[0] ?? null;
   const selectedAnalysis = selectedRoute ? routeIntelligence?.analyses[selectedRoute.id] : undefined;
   const routeRankLabel = (category: string) => {
@@ -1071,7 +1080,8 @@ function NetworkExplorer({
   }, [playing, simulationSpeed]);
 
   const createOptimization = async () => {
-    if (weightsTotal !== 100) return;
+    if (optimizationSubmissionLock.current || loading || weightsTotal !== 100) return;
+    optimizationSubmissionLock.current = true;
     setLoading(true);
     setError(null);
     setMovement(null);
@@ -1096,6 +1106,7 @@ function NetworkExplorer({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The optimization request failed.");
     } finally {
+      optimizationSubmissionLock.current = false;
       setLoading(false);
     }
   };
@@ -1362,6 +1373,7 @@ function NetworkExplorer({
               Rank routes by
               <select aria-label="Route ranking" value={routeRanking} onChange={(event) => setRouteRanking(event.target.value)}>
                 <option value="balanced">Best balanced score</option>
+                <option value="pareto">Non-dominated trade-offs</option>
                 <option value="cost">Lowest modeled cost</option>
                 <option value="time">Fastest delivery</option>
                 <option value="carbon">Lowest estimated carbon</option>
@@ -1376,7 +1388,7 @@ function NetworkExplorer({
                   const recommended = route.id === routeIntelligence?.recommended_route_id;
                   return (
                     <button className={`route-alternative ${selected ? "selected" : ""}`} key={route.id} onClick={() => setSelectedRouteId(route.id)} aria-pressed={selected}>
-                      <span className="route-alternative-top"><strong>Route {index + 1}</strong>{recommended && <Badge tone="good">Best balanced route</Badge>}{routeIntelligence?.assignment_route_id === route.id && <Badge tone="blue">Joint assignment</Badge>}{planRoutes.some((item) => item.id === route.id) && <Badge tone="blue">Saved plan</Badge>}</span>
+                      <span className="route-alternative-top"><strong>Route {index + 1}</strong>{analysis?.pareto_optimal && <Badge tone="blue">Non-dominated</Badge>}{recommended && <Badge tone="good">Best balanced route</Badge>}{routeIntelligence?.assignment_route_id === route.id && <Badge tone="blue">Joint assignment</Badge>}{planRoutes.some((item) => item.id === route.id) && <Badge tone="blue">Saved plan</Badge>}</span>
                       <span className="route-alternative-modes">{route.modes.join(" → ")} · {route.transfer_count} transfers · {route.legs.length} legs</span>
                       <span className="route-alternative-metrics"><span>{formatNumber(analysis?.total_cost ?? route.freight_cost, 1)} {readableUnit(network.cost_unit, "cost")}</span><span>{formatNumber(route.transit_time)} {readableUnit(network.time_unit, "time")}</span><span>{formatNumber(route.carbon_kg)} {readableUnit(network.carbon_unit, "carbon")} est.</span></span>
                     </button>
@@ -1384,7 +1396,7 @@ function NetworkExplorer({
                 })}
               </div>
             ) : <EmptyState title="No feasible route alternatives" detail={error ?? "The selected scenario currently produces no route candidates for this shipment."} />}
-            {routeIntelligence && <small className="route-score-note">Balanced ranking uses normalized cost, delivery time, synthetic carbon and resilience exposure with fixed baseline references. Search is bounded to generated candidates.</small>}
+            {routeIntelligence && <small className="route-score-note">Balanced ranking uses normalized cost, delivery time, synthetic carbon and resilience exposure with fixed baseline references. Non-dominated options have no generated alternative that improves one modeled metric without worsening another. Rankings cover generated candidates only; joint feasibility is checked separately.</small>}
             <TradeoffCharts routes={routes} analyses={routeIntelligence?.analyses ?? {}} selectedRouteId={selectedRoute?.id ?? null} />
             {routeIntelligence && baselineAnalysisRoute && <div className="carbon-target-panel">
               <strong>Carbon reduction target · selected shipment</strong>
@@ -2244,17 +2256,21 @@ export default function App() {
           </div>
         </header>
         <div className="content-area">
-          {loadError && !connected && (
-            <div role="alert" className="load-error">
-              <strong>Cannot connect to the QSupply API.</strong> {loadError}
-              <span>Check the configured API service and try again.</span>
-            </div>
-          )}
           {loading && !connected ? (
             <div className="loading-page">
               <span className="spinner large" />
               <strong>Connecting to QSupply API</strong>
-              <p>Loading actual capabilities and saved run history.</p>
+              <p>Checking the API and loading saved data. Transient connection errors are retried automatically.</p>
+            </div>
+          ) : !connected ? (
+            <div className="api-unavailable-state" role="alert">
+              <div className="failure-icon">!</div>
+              <h1>QSupply API unavailable</h1>
+              <p>{loadError || "The health endpoint did not report a healthy API."}</p>
+              <p>Dashboard data is withheld until the configured backend responds.</p>
+              <button className="primary-button" onClick={() => void refresh()} disabled={loading}>
+                {loading ? "Retrying connection…" : "Retry connection"}
+              </button>
             </div>
           ) : page === "overview" ? (
             <Overview

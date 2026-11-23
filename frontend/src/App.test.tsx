@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -459,6 +460,29 @@ describe("QSupply dashboard interactions", () => {
     ).toBeInTheDocument();
   });
 
+  it("prevents duplicate CVRP submissions while the first request is pending", async () => {
+    let resolveRun: ((run: RunRecord) => void) | undefined;
+    vi.mocked(api.createRun).mockImplementation(
+      () => new Promise((resolve) => { resolveRun = resolve; }),
+    );
+    render(<App />);
+    await screen.findByRole("heading", { name: "Control tower", level: 1 });
+    await userEvent.click(
+      within(screen.getByRole("navigation", { name: "Main navigation" })).getByRole("button", { name: /Optimization/ }),
+    );
+    const button = await screen.findByRole("button", { name: /Run optimization/ });
+
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(api.createRun).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveRun?.(completedRun);
+    });
+  });
+
   it("presents a depot-only route as an unused vehicle without altering the result", async () => {
     const user = userEvent.setup();
     const runWithUnusedVehicle: RunRecord = {
@@ -596,6 +620,7 @@ describe("QSupply dashboard interactions", () => {
       analyses: {
         [route.id]: {
           route_id: route.id,
+          pareto_optimal: true,
           total_cost: 213,
           delay_penalty: 0,
           deadline_met: true,
@@ -647,15 +672,23 @@ describe("QSupply dashboard interactions", () => {
     );
     await screen.findByTestId("global-map");
     expect(await screen.findByLabelText("Shipment")).toHaveValue("EXP-104");
-    await user.click(screen.getByRole("button", { name: "Run recovery optimization" }));
+    const runRecovery = screen.getByRole("button", { name: "Run recovery optimization" });
+    await act(async () => {
+      fireEvent.click(runRecovery);
+      fireEvent.click(runRecovery);
+    });
     expect(api.createGlobalOptimization).toHaveBeenCalledWith({
       scenario_id: scenarioId,
       weights: { cost: 40, delivery_time: 25, carbon: 20, resilience: 15 },
       max_routes: 8,
       shipment_ids: [shipment.id],
     });
+    expect(api.createGlobalOptimization).toHaveBeenCalledTimes(1);
     expect(await screen.findByText("Recovery feasible")).toBeInTheDocument();
     expect(await screen.findByText("Recommended for the configured weighted profile.")).toBeInTheDocument();
+    expect(screen.getByText("Non-dominated")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Route ranking"), "pareto");
+    expect(screen.getByRole("button", { name: /Non-dominated/ })).toBeInTheDocument();
     expect(screen.getByText("DETERMINISTIC ROUTE INTELLIGENCE · NO LLM")).toBeInTheDocument();
     expect(screen.getByText("Estimated carbon by mode")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download CSV report" })).toBeInTheDocument();
@@ -684,5 +717,18 @@ describe("QSupply dashboard interactions", () => {
     expect(screen.getByRole("spinbutton", { name: /carbon/ })).toHaveValue(10);
     expect(screen.getByRole("spinbutton", { name: /resilience/ })).toHaveValue(10);
     expect(screen.getByText("Objective weights: 100% · valid")).toBeInTheDocument();
+  });
+
+  it("withholds dashboard data after API failure and recovers through manual retry", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.health).mockRejectedValueOnce(new Error("backend is starting"));
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "QSupply API unavailable" })).toBeInTheDocument();
+    expect(screen.getByText("Dashboard data is withheld until the configured backend responds.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Control tower", level: 1 })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry connection" }));
+    expect(await screen.findByRole("heading", { name: "Control tower", level: 1 })).toBeInTheDocument();
+    expect(api.health).toHaveBeenCalledTimes(2);
   });
 });

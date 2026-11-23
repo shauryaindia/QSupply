@@ -68,11 +68,49 @@ function requireApiBaseUrl(): string {
   return API_BASE_URL;
 }
 
+const MAX_GET_ATTEMPTS = 3;
+const RETRYABLE_STATUS_CODES = new Set([408, 425, 429]);
+
+function retryDelay(attempt: number): Promise<void> {
+  const delayMs = 300 * 2 ** (attempt - 1);
+  return new Promise((resolve) => window.setTimeout(resolve, delayMs));
+}
+
+function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUS_CODES.has(status) || status >= 500;
+}
+
+/** Retry only idempotent GETs for likely transient network/service failures. */
+async function fetchWithRetry(url: string, init: RequestInit = {}): Promise<Response> {
+  const isGet = (init.method ?? "GET").toUpperCase() === "GET";
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      if (
+        !isGet ||
+        !isRetryableStatus(response.status) ||
+        attempt >= MAX_GET_ATTEMPTS
+      ) {
+        return response;
+      }
+    } catch (error) {
+      if (
+        !isGet ||
+        init.signal?.aborted ||
+        attempt >= MAX_GET_ATTEMPTS
+      ) {
+        throw error;
+      }
+    }
+    await retryDelay(attempt);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const baseUrl = requireApiBaseUrl();
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`, {
+    response = await fetchWithRetry(`${baseUrl}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
@@ -99,7 +137,7 @@ async function requestBlob(path: string): Promise<Blob> {
   const baseUrl = requireApiBaseUrl();
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`);
+    response = await fetchWithRetry(`${baseUrl}${path}`);
   } catch {
     throw new Error("QSupply API is unreachable. Check the configured backend service.");
   }

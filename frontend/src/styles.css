@@ -1591,6 +1591,34 @@ th:first-child {
   justify-content: center;
   color: #617184;
 }
+.api-unavailable-state {
+  min-height: 55vh;
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #617184;
+}
+.api-unavailable-state h1 {
+  margin: 16px 0 6px;
+  color: #172b42;
+  font-size: 28px;
+  line-height: 1.2;
+}
+.api-unavailable-state p {
+  max-width: 520px;
+  margin: 5px 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.api-unavailable-state .primary-button {
+  margin-top: 16px;
+  font-size: 14px;
+}
 .loading-page strong {
   margin-top: 14px;
   font-size: 12px;
