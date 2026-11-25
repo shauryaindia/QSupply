@@ -368,6 +368,7 @@ class QiskitQAOASolver:
                 "optimizer": config.optimizer,
                 "max_iterations": config.max_iterations,
                 "shots_per_evaluation": config.shots,
+                "optimizer_evaluations": execution.optimizer_sample_count // config.shots,
                 "random_seed": config.random_seed,
                 "max_variables": config.max_variables,
                 "cost_normalization_scale": str(execution.cost_normalization_scale),

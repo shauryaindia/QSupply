@@ -27,7 +27,7 @@ from ..ising import qubo_to_ising
 from ..qaoa import QAOAConfig
 from ..quantum_benchmark import benchmark_qaoa_backends_repeated
 from ..solver import ExactQUBOSolver, ProblemRepresentation
-from .global_demo import global_demo_network, global_demo_shipments
+from .global_demo import global_demo_disruptions, global_demo_network, global_demo_shipments
 from .planning import ObjectiveWeights, assign_routes, compare_recovery
 from .route_qubo import MAX_ROUTE_QUBO_VARIABLES, formulate_route_assignment_qubo
 from .route_qubo_demo import ROUTE_QUBO_DEMO_SCENARIO
@@ -262,19 +262,24 @@ def _aggregate_runs(runs: Sequence[ExperimentRun]) -> tuple[Mapping[str, Any], .
     return tuple(result)
 
 
-def _problem(spec: RouteExperimentSpec, weights: ObjectiveWeights):
+def prepare_route_candidates(spec: RouteExperimentSpec, weights: ObjectiveWeights):
+    """Generate the same fixed candidate set for bounded and classical-only cases."""
     all_profiles = {p.request.id: p for p in global_demo_shipments()}
     missing = set(spec.shipment_ids) - set(all_profiles)
     if missing:
         raise ValueError(f"unknown synthetic shipment IDs: {sorted(missing)}")
     profiles = tuple(all_profiles[key] for key in spec.shipment_ids)
-    scenario = ROUTE_QUBO_DEMO_SCENARIO if spec.scenario_id else None
-    if scenario is not None and scenario.id != spec.scenario_id:
+    scenarios = {s.id: s for s in (*global_demo_disruptions(), ROUTE_QUBO_DEMO_SCENARIO)}
+    scenario = scenarios.get(spec.scenario_id)
+    if spec.scenario_id is not None and scenario is None:
         raise ValueError("only declared deterministic scenarios are supported")
     comparison = compare_recovery(global_demo_network(), profiles, scenario, weights,
                                   max_routes=spec.max_routes_per_shipment)
-    if not comparison.recovery_feasible:
-        raise ValueError(f"synthetic instance {spec.problem_id} has no feasible recovery: {comparison.failure_reason}")
+    return profiles, scenario, comparison
+
+
+def _problem(spec: RouteExperimentSpec, weights: ObjectiveWeights):
+    profiles, scenario, comparison = prepare_route_candidates(spec, weights)
     formulation = formulate_route_assignment_qubo(
         global_demo_network(), profiles, comparison.recovery_candidates, weights,
         comparison.normalization_references, scenario,
@@ -392,7 +397,7 @@ def run_route_experiments(
                          elapsed: float | None, timing: str, metadata: Mapping[str, Any] | None,
                          seed: int | None) -> ExperimentRun:
                 if assignment is None:
-                    return ExperimentRun(config_for(backend, seed), backend, status, None, None, None,
+                    return ExperimentRun(config_for(backend, seed), backend, status, False if status == "infeasible" else None, None, None,
                         None, None, str(formulation.offset), None, None, None, (), elapsed, timing,
                         _freeze(metadata) if metadata else None)
                 evaluation = formulation.evaluate_assignment(assignment)
@@ -473,6 +478,9 @@ def run_route_experiments(
                             {"execution": record.execution_metadata, "backend_version": record.backend_version,
                              "seed_applied": record.seed_applied, "requested_seed": record.requested_seed,
                              "shots": record.shots, "depth": record.qaoa_depth,
+                             "circuit_depth": record.circuit_depth,
+                             "optimizer_evaluations": record.optimizer_evaluations,
+                             "sample_call_seconds": record.circuit_execution_time_seconds,
                              "feasible_sample_fraction": record.feasible_sample_fraction,
                              "optimal_feasible_success_probability": next((s.optimal_feasible_success_probability for s in report.summaries), None)},
                             record.requested_seed))

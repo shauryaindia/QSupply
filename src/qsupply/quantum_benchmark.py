@@ -75,6 +75,7 @@ class QuantumBenchmarkRecord:
     best_binary_assignment: Mapping[str, int] | None = None
     qubo_energy: Real | None = None
     ising_energy: Real | None = None
+    optimizer_evaluations: int | None = None
 
 
 @dataclass(frozen=True)
@@ -345,6 +346,7 @@ def _records_for_runs(
                 best_binary_assignment=result.best_binary_assignment,
                 qubo_energy=result.qubo_energy,
                 ising_energy=result.ising_energy,
+                optimizer_evaluations=_optional_int(configuration.get("optimizer_evaluations")),
             )
         )
     return tuple(records)

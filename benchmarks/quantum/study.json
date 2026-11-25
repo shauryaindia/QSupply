@@ -1,0 +1,1355 @@
+{
+  "software_versions": {
+    "python": "3.13.3",
+    "qsupply": "source-tree",
+    "qiskit": "2.6.2",
+    "qulacs": "0.6.14"
+  },
+  "generation_seed": 7102,
+  "seeds": [
+    11,
+    22,
+    33,
+    44,
+    55
+  ],
+  "depth": 1,
+  "iterations": 2,
+  "optimizer": "spsa",
+  "shots": 64,
+  "cases": [
+    {
+      "id": "route-qubo-8",
+      "shipments": [
+        "EXP-104",
+        "EXP-407"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-route-qubo-shanghai-access-capacity",
+      "profile": "balanced",
+      "weights": {
+        "cost": 40,
+        "delivery_time": 25,
+        "carbon": 20,
+        "resilience": 15
+      },
+      "selected": true,
+      "variables": 8,
+      "candidates": 6,
+      "exact": "29066943509961317561439218246347143469767244188766373/31669597005790463848721944706752171327256465359503360",
+      "fingerprint": "b3255fa4491a5d283cec4b354636bb14415de9537012111ca6c25244585d1d44",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.917818547064136,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.019781457987846807
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.917818547064136,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.001714958983939141
+        },
+        {
+          "method": "qiskit",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            15
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 3,
+          "feasibility_rate": 0.6,
+          "optimal_rate": 0.2,
+          "best_objective": 0.917818547064136,
+          "mean_gap_percent": 1.6201246404750973,
+          "mean_seconds": 0.08546075819176621
+        },
+        {
+          "method": "qulacs",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            39
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 4,
+          "feasibility_rate": 0.8,
+          "optimal_rate": 0.6,
+          "best_objective": 0.917818547064136,
+          "mean_gap_percent": 0.28048201988175275,
+          "mean_seconds": 0.06621723319985903
+        }
+      ]
+    },
+    {
+      "id": "route-qubo-10",
+      "shipments": [
+        "EXP-104",
+        "EXP-205",
+        "EXP-306"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-route-qubo-shanghai-access-capacity",
+      "profile": "carbon",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 0,
+        "carbon": 100,
+        "resilience": 0
+      },
+      "selected": true,
+      "variables": 10,
+      "candidates": 8,
+      "exact": "286428936300763565/494945599048017536",
+      "fingerprint": "1f43c08fc2c249aea5953213134d994ebfb8001a982f6ccc052a4d966c662ad3",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5787079162875342,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.07057133299531415
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5787079162875342,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0022131669975351542
+        },
+        {
+          "method": "qiskit",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            15
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 2,
+          "feasibility_rate": 0.4,
+          "optimal_rate": 0.0,
+          "best_objective": 0.6360327570518653,
+          "mean_gap_percent": 38.28616352201258,
+          "mean_seconds": 0.10417836659471505
+        },
+        {
+          "method": "qulacs",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            39
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 3,
+          "feasibility_rate": 0.6,
+          "optimal_rate": 0.0,
+          "best_objective": 0.6005459508644222,
+          "mean_gap_percent": 43.18658280922432,
+          "mean_seconds": 0.07364391660667025
+        }
+      ]
+    },
+    {
+      "id": "route-qubo-11",
+      "shipments": [
+        "EXP-104",
+        "EXP-407",
+        "EXP-508"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-route-qubo-shanghai-access-capacity",
+      "profile": "balanced",
+      "weights": {
+        "cost": 40,
+        "delivery_time": 25,
+        "carbon": 20,
+        "resilience": 15
+      },
+      "selected": true,
+      "variables": 11,
+      "candidates": 9,
+      "exact": "5035406693776836957042376711008417472622176135994597/6288583413417173853663212987004068875533671228990400",
+      "fingerprint": "73a4af095450bd13280e2b04c02df86ac1f3a99d748cf2232900b582439d6865",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8007219373179358,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.16843645798508078
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8007219373179358,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0025032080011442304
+        },
+        {
+          "method": "qiskit",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            15
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 4,
+          "feasibility_rate": 0.8,
+          "optimal_rate": 0.2,
+          "best_objective": 0.8007219373179358,
+          "mean_gap_percent": 6.707490296276912,
+          "mean_seconds": 0.1373323500098195
+        },
+        {
+          "method": "qulacs",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            39
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 4,
+          "feasibility_rate": 0.8,
+          "optimal_rate": 0.0,
+          "best_objective": 0.8094569963070312,
+          "mean_gap_percent": 7.425670288449943,
+          "mean_seconds": 0.08886605859734117
+        }
+      ]
+    },
+    {
+      "id": "route-qubo-12",
+      "shipments": [
+        "EXP-104",
+        "EXP-205",
+        "EXP-407",
+        "EXP-508"
+      ],
+      "route_cap": 3,
+      "scenario": null,
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": true,
+      "variables": 12,
+      "candidates": 12,
+      "exact": "5043369288592107/6877923842682736",
+      "fingerprint": "7397ba7044a583be0db50d4536d7961b8ba8b2fd326e9fef1f4008eb32c9b1a3",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.7332691381800673,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.2535378329921514
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.7332691381800673,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.00282770799822174
+        },
+        {
+          "method": "qiskit",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            6
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 3,
+          "feasibility_rate": 0.6,
+          "optimal_rate": 0.0,
+          "best_objective": 0.7368801155512759,
+          "mean_gap_percent": 7.912015758371635,
+          "mean_seconds": 0.13981180820264855
+        },
+        {
+          "method": "qulacs",
+          "outcomes": {
+            "completed": 5
+          },
+          "circuit_depths": [
+            12
+          ],
+          "optimizer_evaluations": 35,
+          "trials": 5,
+          "completed": 5,
+          "feasible": 3,
+          "feasibility_rate": 0.6,
+          "optimal_rate": 0.0,
+          "best_objective": 0.7368801155512759,
+          "mean_gap_percent": 3.6550667542131747,
+          "mean_seconds": 0.06257915799506009
+        }
+      ]
+    },
+    {
+      "id": "portfolio-01",
+      "shipments": [
+        "EXP-104",
+        "EXP-205"
+      ],
+      "route_cap": 2,
+      "scenario": null,
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 4,
+      "candidates": 4,
+      "exact": "12431811471387307/12807111440334848",
+      "fingerprint": "67cbc07fa8c33e3dfefa07023a12797ba5df6ad0492708804d0034f6a0f08528",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.9706959706959707,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0014331669954117388
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.9706959706959707,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.001064958021743223
+        }
+      ]
+    },
+    {
+      "id": "portfolio-02",
+      "shipments": [
+        "DOM-710",
+        "EXP-104",
+        "EXP-508"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-singapore-customs-delay",
+      "profile": "carbon",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 0,
+        "carbon": 100,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 9,
+      "candidates": 9,
+      "exact": "5141609574581317/12966613927137552",
+      "fingerprint": "b4880d58ea44554fc82d084d5aa5aa90fdcf4453a7becf25b0cb8b502cf35dfb",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.39652677279305365,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.020586625003488734
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.39652677279305365,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0023852910089772195
+        }
+      ]
+    },
+    {
+      "id": "portfolio-03",
+      "shipments": [
+        "EXP-205",
+        "EXP-407",
+        "EXP-508"
+      ],
+      "route_cap": 2,
+      "scenario": "synthetic-suez-capacity-restriction",
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 6,
+      "candidates": 6,
+      "exact": "27978612685039207/34142914675002576",
+      "fingerprint": "73bab66cb3bccba8cbfe05fb1ba1b6a1fa44c40c58e4165c2bceacb36f5a7edd",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8194558944765045,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.003470499999821186
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8194558944765045,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.001967666990822181
+        }
+      ]
+    },
+    {
+      "id": "portfolio-04",
+      "shipments": [
+        "EXP-205",
+        "EXP-609"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-china-us-port-closure",
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 5,
+      "candidates": 5,
+      "exact": "76673783655982695/93562282258622048",
+      "fingerprint": "b242ee97b0da211165ed484939c7d756664eb83f5a3abf25ece35b7c118bfa58",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8194945848375452,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.002166000020224601
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8194945848375452,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.002003750007133931
+        }
+      ]
+    },
+    {
+      "id": "portfolio-05",
+      "shipments": [
+        "DOM-710",
+        "EXP-205"
+      ],
+      "route_cap": 2,
+      "scenario": null,
+      "profile": "balanced",
+      "weights": {
+        "cost": 40,
+        "delivery_time": 25,
+        "carbon": 20,
+        "resilience": 15
+      },
+      "selected": false,
+      "variables": 4,
+      "candidates": 4,
+      "exact": "1783411447042532023168695140312634361604068973347/2038626511573639488955401811132993493975330361600",
+      "fingerprint": "ed078e79056f8a704946e7271fa1567c7bf08d1a7172ad9040d4d84013f8a0ad",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8748102886515962,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0014726670051459223
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.8748102886515962,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0010866669763345271
+        }
+      ]
+    },
+    {
+      "id": "portfolio-06",
+      "shipments": [
+        "EXP-306",
+        "EXP-609"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-singapore-customs-delay",
+      "profile": "carbon",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 0,
+        "carbon": 100,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 4,
+      "candidates": 4,
+      "exact": "34227357168015773/350830410972161664",
+      "fingerprint": "98f45fa3ee0d5c529065df47f25758b40cd44476aaeadc9f332ac26823d5fe5a",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.0975609756097561,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0015029580099508166
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.0975609756097561,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0011628339998424053
+        }
+      ]
+    },
+    {
+      "id": "portfolio-07",
+      "shipments": [
+        "DOM-710",
+        "EXP-609"
+      ],
+      "route_cap": 2,
+      "scenario": "synthetic-suez-capacity-restriction",
+      "profile": "balanced",
+      "weights": {
+        "cost": 40,
+        "delivery_time": 25,
+        "carbon": 20,
+        "resilience": 15
+      },
+      "selected": false,
+      "variables": 4,
+      "candidates": 4,
+      "exact": "87670161908864586504362421161237291642651830483137/252747071032187676195134869371990246889225694740480",
+      "fingerprint": "0ab70eb0112576c06c3df1cc79c8693711bde0a90443ab195d0aa28f51be3411",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.3468691508504155,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.00156154201249592
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.3468691508504155,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.001165916008176282
+        }
+      ]
+    },
+    {
+      "id": "portfolio-08",
+      "shipments": [
+        "EXP-104",
+        "EXP-306"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-china-us-port-closure",
+      "profile": "balanced",
+      "weights": {
+        "cost": 40,
+        "delivery_time": 25,
+        "carbon": 20,
+        "resilience": 15
+      },
+      "selected": false,
+      "variables": 5,
+      "candidates": 5,
+      "exact": "1122616518922587422724513264484906519/2140353669650152163299476185011978240",
+      "fingerprint": "53100f87fe19a355b95ef3756eac42b4db793d43d4c98c3feb318f2ad75c6f71",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.524500476178819,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0021515839907806367
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.524500476178819,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0014324169897008687
+        }
+      ]
+    },
+    {
+      "id": "portfolio-09",
+      "shipments": [
+        "DOM-710",
+        "EXP-306",
+        "EXP-609"
+      ],
+      "route_cap": 2,
+      "scenario": null,
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 6,
+      "candidates": 6,
+      "exact": "80839613311300407/147492887796383744",
+      "fingerprint": "661a75750e6b8ba2a4a6f08fc363d2a6db2a067d4f46e6d49c8d35e06b1f904f",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5480916030534352,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0028531249845400453
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5480916030534352,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0014751249982509762
+        }
+      ]
+    },
+    {
+      "id": "portfolio-10",
+      "shipments": [
+        "EXP-205",
+        "EXP-508"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-singapore-customs-delay",
+      "profile": "carbon",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 0,
+        "carbon": 100,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 6,
+      "candidates": 6,
+      "exact": "38730956795386267/88946092640567296",
+      "fingerprint": "1a03a37d5d071ae22dfd416a58178d7df4b2b16662c852e29dd89ba0d076f9df",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.43544303797468353,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0032356669835280627
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.43544303797468353,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0015950000088196248
+        }
+      ]
+    },
+    {
+      "id": "portfolio-11",
+      "shipments": [
+        "DOM-710"
+      ],
+      "route_cap": 2,
+      "scenario": "synthetic-suez-capacity-restriction",
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 2,
+      "candidates": 2,
+      "exact": "17564038546744935/34114767177331504",
+      "fingerprint": "5cfd0782421cb70bfe1a49458de634af2152faace630cb68d285253fa7638b1b",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5148514851485149,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0007239580154418945
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5148514851485149,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0005884999991394579
+        }
+      ]
+    },
+    {
+      "id": "portfolio-12",
+      "shipments": [
+        "DOM-710",
+        "EXP-407"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-china-us-port-closure",
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 6,
+      "candidates": 6,
+      "exact": "108536751019628951/138260508560274240",
+      "fingerprint": "7c0a1dbdb73acbe2545cd02c2a46851d36191b3001e225ea7d653ce4ce6f6f1a",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.785016286644951,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0030048330081626773
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.785016286644951,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0015413330111186951
+        }
+      ]
+    },
+    {
+      "id": "portfolio-13",
+      "shipments": [
+        "DOM-710",
+        "EXP-306"
+      ],
+      "route_cap": 2,
+      "scenario": null,
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 4,
+      "candidates": 4,
+      "exact": "14111278832427555/26195937832538384",
+      "fingerprint": "2e20aa68784c7bc5edb21cafc49804a7bfea73bcc23c00cc288d356600594969",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5386819484240688,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0014269999810494483
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5386819484240688,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.001006249978672713
+        }
+      ]
+    },
+    {
+      "id": "portfolio-14",
+      "shipments": [
+        "DOM-710",
+        "EXP-407",
+        "EXP-609"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-singapore-customs-delay",
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 8,
+      "candidates": 8,
+      "exact": "131730289100587013/207165582859042816",
+      "fingerprint": "c4599abd4b4db9df2e14a89fcb76bfccc4a6c503a0a95bd2c292f69efd258aef",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.6358695652173914,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.009708500001579523
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.6358695652173914,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0021422909921966493
+        }
+      ]
+    },
+    {
+      "id": "portfolio-15",
+      "shipments": [
+        "EXP-104",
+        "EXP-205",
+        "EXP-508"
+      ],
+      "route_cap": 2,
+      "scenario": "synthetic-suez-capacity-restriction",
+      "profile": "balanced",
+      "weights": {
+        "cost": 40,
+        "delivery_time": 25,
+        "carbon": 20,
+        "resilience": 15
+      },
+      "selected": false,
+      "variables": 8,
+      "candidates": 6,
+      "exact": null,
+      "fingerprint": "b50480c2bae47eceaa0b78e1b0a812f1c41263ad2fd28dd8c966130ca13ca9a3",
+      "reason": "No feasible plan over these candidates.",
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 0,
+          "feasibility_rate": 0.0,
+          "optimal_rate": null,
+          "best_objective": null,
+          "mean_gap_percent": null,
+          "mean_seconds": 0.014237541006878018
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "infeasible": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 0,
+          "feasible": 0,
+          "feasibility_rate": null,
+          "optimal_rate": null,
+          "best_objective": null,
+          "mean_gap_percent": null,
+          "mean_seconds": 0.001201000006403774
+        }
+      ]
+    },
+    {
+      "id": "portfolio-16",
+      "shipments": [
+        "EXP-104",
+        "EXP-508",
+        "EXP-609"
+      ],
+      "route_cap": 3,
+      "scenario": "synthetic-china-us-port-closure",
+      "profile": "time",
+      "weights": {
+        "cost": 0,
+        "delivery_time": 100,
+        "carbon": 0,
+        "resilience": 0
+      },
+      "selected": false,
+      "variables": 8,
+      "candidates": 8,
+      "exact": "95476312100254517/161003686678495232",
+      "fingerprint": "de7dff74574508a7c54483c68411291927c24db82ddadcfd1adc385e1c3ac027",
+      "reason": null,
+      "methods": [
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.593006993006993,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.00943195802392438
+        },
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.593006993006993,
+          "mean_gap_percent": 0.0,
+          "mean_seconds": 0.0021114590053912252
+        }
+      ]
+    },
+    {
+      "id": "size-control",
+      "shipments": [
+        "DOM-710",
+        "EXP-104",
+        "EXP-205",
+        "EXP-306",
+        "EXP-407",
+        "EXP-508",
+        "EXP-609"
+      ],
+      "route_cap": 3,
+      "scenario": null,
+      "profile": "balanced",
+      "weights": {
+        "cost": 40,
+        "delivery_time": 25,
+        "carbon": 20,
+        "resilience": 15
+      },
+      "selected": false,
+      "variables": 19,
+      "candidates": 19,
+      "exact": null,
+      "reason": "route assignment requires 19 binary variables (19 route choices, 0 capacity slack); the current exact/QAOA limit is 12. Reduce the explicitly selected candidate set or shipment scope and formulate again.",
+      "methods": [
+        {
+          "method": "classical-assignment",
+          "outcomes": {
+            "completed": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 1,
+          "feasible": 1,
+          "feasibility_rate": 1.0,
+          "optimal_rate": null,
+          "best_objective": 0.5507783999427401,
+          "mean_gap_percent": null,
+          "mean_seconds": 0.00567695900099352
+        },
+        {
+          "method": "exact-qubo",
+          "outcomes": {
+            "unavailable": 1
+          },
+          "circuit_depths": [],
+          "optimizer_evaluations": null,
+          "trials": 1,
+          "completed": 0,
+          "feasible": 0,
+          "feasibility_rate": null,
+          "optimal_rate": null,
+          "best_objective": null,
+          "mean_gap_percent": null,
+          "mean_seconds": null
+        }
+      ]
+    }
+  ]
+}

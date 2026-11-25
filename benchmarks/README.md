@@ -29,3 +29,17 @@ are compared without intermediate float rounding. Demands and capacities use
 the same represented-value convention for feasibility. Benchmark timers cover each
 method invocation plus common route validation and scoring; they are single
 wall-clock observations, not statistically reliable timing claims.
+
+## Quantum route-assignment study
+
+The [Milestone 7B research report](quantum/report.md) compares 21 synthetic
+portfolios. The Quantum Computing page reads the saved study summary. To
+regenerate the report, JSON records and CSV locally using an isolated Python
+environment with the optional SDKs installed:
+
+```sh
+PYTHONPATH=src python examples/quantum_research.py /tmp/qsupply-research
+```
+
+The archived SDK versions and simulation settings are in the report. Review
+the regenerated artifacts before replacing the snapshot under `benchmarks/quantum`.

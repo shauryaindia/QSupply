@@ -41,6 +41,8 @@ import {
 } from "./api/client";
 import type { components } from "./api/generated";
 
+const SavedQuantumStudy = lazy(() => import("./SavedQuantumStudy"));
+
 type Page = "overview" | "workspace" | "network" | "benchmarking" | "quantum";
 
 function isUnusedVehicleRoute(route: string[]): boolean {
@@ -2024,6 +2026,7 @@ function QuantumComputing({
   return (
     <>
       <PageHeader page="quantum" eyebrow="PLATFORM / QUANTUM EXECUTION" />
+      <Suspense fallback={<p>Loading saved benchmark results…</p>}><SavedQuantumStudy /></Suspense>
       <div className={`quantum-callout ${available ? "quantum-callout-ready" : ""}`}>
         <span>✳</span>
         <div>

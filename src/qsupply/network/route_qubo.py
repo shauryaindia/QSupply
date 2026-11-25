@@ -33,6 +33,7 @@ MAX_ROUTE_QUBO_VARIABLES = min(
 
 class UnsupportedRouteQUBOError(ValueError):
     """Raised when an assignment formulation exceeds the explicit variable cap."""
+    variable_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -605,13 +606,16 @@ def formulate_route_assignment_qubo(
         )
 
     if len(variables) > MAX_ROUTE_QUBO_VARIABLES:
-        raise UnsupportedRouteQUBOError(
+        error = UnsupportedRouteQUBOError(
             f"route assignment requires {len(variables)} binary variables "
             f"({len(route_variables)} route choices, "
             f"{sum(len(bits) for bits in slack_variables.values())} capacity slack); "
             f"the current exact/QAOA limit is {MAX_ROUTE_QUBO_VARIABLES}. "
             "Reduce the explicitly selected candidate set or shipment scope and formulate again."
         )
+
+        error.variable_count = len(variables)
+        raise error
 
     coefficients: dict[tuple[str, str], Fraction] = {}
     offset = Fraction(0)
