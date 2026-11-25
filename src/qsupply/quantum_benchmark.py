@@ -72,6 +72,9 @@ class QuantumBenchmarkRecord:
     optimization_time_seconds: float | None = None
     circuit_execution_time_seconds: float | None = None
     decoded_solution: Mapping[str, Any] | None = None
+    best_binary_assignment: Mapping[str, int] | None = None
+    qubo_energy: Real | None = None
+    ising_energy: Real | None = None
 
 
 @dataclass(frozen=True)
@@ -339,6 +342,9 @@ def _records_for_runs(
                 optimization_time_seconds=result.optimization_time_seconds,
                 circuit_execution_time_seconds=result.circuit_execution_time_seconds,
                 decoded_solution=result.decoded_solution,
+                best_binary_assignment=result.best_binary_assignment,
+                qubo_energy=result.qubo_energy,
+                ising_energy=result.ising_energy,
             )
         )
     return tuple(records)
@@ -387,6 +393,9 @@ def _exact_record(
         feasible_reference_enumeration_time_seconds=feasible_reference_enumeration_seconds,
         requested_seed=request.random_seed,
         decoded_solution=exact.decoded_solution,
+        best_binary_assignment=exact.best_binary_assignment,
+        qubo_energy=exact.qubo_energy,
+        ising_energy=exact.ising_energy,
     )
 
 

@@ -161,6 +161,9 @@ class TestQuantumBenchmark(unittest.TestCase):
         self.assertEqual(records[1].backend_type, BackendType.SIMULATOR)
         self.assertEqual(records[1].optimization_time_seconds, 0.003)
         self.assertEqual(records[1].circuit_execution_time_seconds, 0.007)
+        self.assertEqual(dict(records[1].best_binary_assignment), {"a": 1, "b": 0})
+        self.assertEqual(records[1].qubo_energy, records[1].best_sampled_energy - request.constant_offset)
+        self.assertEqual(records[1].ising_energy, records[1].best_sampled_energy)
 
     def test_relative_gap_is_unavailable_when_exact_energy_is_zero(self):
         request = SolverRequest(QUBO(("a", "b"), {}))

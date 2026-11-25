@@ -12,17 +12,20 @@ classical assignment results over the same generated candidates, and shows a
 carbon-priority comparison on the synthetic disruption scenario. Exactness is
 limited to the candidate routes shown by that example.
 
-With the optional Qiskit and Qulacs requirements installed in an isolated
-environment, run:
+With the repository-supported Qiskit and Qulacs versions installed in an
+isolated environment, run:
 
 ```sh
-PYTHONPATH=src /tmp/qsupply-quantum-venv/bin/python examples/benchmark_route_qubo.py
+PYTHONPATH=src /tmp/qsupply-m6-quantum-venv/bin/python examples/benchmark_route_qubo.py
 ```
 
-This emits JSON benchmark records for five explicit seeds, exact and classical
-references, both QAOA backends, per-run feasibility and timing scopes. See
-[`docs/quantum/route-assignment-qubo.md`](../docs/quantum/route-assignment-qubo.md)
-for the exact command, measurement definitions and limitations.
+The default runs the 8-variable instance with three explicit seeds, exact and
+classical references, both QAOA backends, independently validated results and
+timing scopes. Add `--all-sizes` for the 8, 10, 11 and 12-variable presets;
+add `--output-dir /path/to/new-directory` to export a JSON manifest, individual
+JSON runs and CSV summary. See
+[`docs/quantum/fujitsu-experiment-readiness.md`](../docs/quantum/fujitsu-experiment-readiness.md)
+for methodology, repeatability details and the future QARP comparison plan.
 
 Install optional Qulacs support with `python3 -m pip install -r
 requirements-quantum.txt`, then run `PYTHONPATH=src python3

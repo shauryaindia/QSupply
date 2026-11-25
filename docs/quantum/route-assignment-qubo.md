@@ -106,23 +106,26 @@ route-QUBO example with:
 PYTHONPATH=src python3 examples/route_assignment_qubo.py
 ```
 
-Run the four-method benchmark for balanced and carbon-priority profiles with:
+Run the reproducible route experiment harness for both profiles with:
 
 ```sh
-python3 -m venv /tmp/qsupply-quantum-venv
-/tmp/qsupply-quantum-venv/bin/python -m pip install -r requirements-qiskit.txt -r requirements-quantum.txt
-PYTHONPATH=src /tmp/qsupply-quantum-venv/bin/python examples/benchmark_route_qubo.py
+PYTHONPATH=src /tmp/qsupply-m6-quantum-venv/bin/python examples/benchmark_route_qubo.py
 ```
 
-The benchmark uses seeds `11, 22, 33, 44, 55`, QAOA depth 1, 128 shots and
-three optimizer iterations. It reports the exact penalized-model minimum and
-the independently validated best feasible business objective separately,
-then runs classical assignment, Qiskit and Qulacs on the same routes, weights,
-normalization references and offset. QAOA optimality gaps are only reported for
-feasible samples and use the best feasible business objective as denominator;
-infeasible sample gaps are unavailable. The reported success probability is
-the observed fraction of explicitly seeded trials that returned a feasible
-sample matching that reference. It is descriptive of those runs only.
+The default uses the 8-variable case, seeds `11, 22, 33`, QAOA depth 1, 64
+shots and two optimizer iterations. Add `--all-sizes` for 8/10/11/12-variable
+presets and `--output-dir /tmp/new-experiment` to write the manifest,
+individual runs and CSV summary. See
+[`fujitsu-experiment-readiness.md`](fujitsu-experiment-readiness.md) for
+configuration fingerprints, versions, exports, exact-versus-feasible
+semantics, scale limits and the future vendor-comparison methodology.
+
+The benchmark reports the exact penalized-model minimum and the independently
+validated best feasible business objective separately. Classical assignment,
+Qiskit and Qulacs use the same routes, weights, normalization references and
+offset. QAOA gaps are available only for feasible samples. Success probability
+is limited to observed explicit-seed trials and does not predict future
+performance.
 
 Solver-call wall time is reported per run. QAOA optimizer wall time includes
 the sampling calls made during optimization and therefore overlaps the

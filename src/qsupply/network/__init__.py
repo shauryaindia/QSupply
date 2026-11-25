@@ -37,6 +37,15 @@ from .route_qubo_demo import (
     build_route_qubo_demo,
     compare_route_qubo_to_classical,
 )
+from .route_qubo_experiments import (
+    ExperimentConfiguration,
+    ExperimentRun,
+    RouteExperimentReport,
+    RouteExperimentSpec,
+    SYNTHETIC_ROUTE_EXPERIMENTS,
+    export_experiment_report,
+    run_route_experiments,
+)
 
 __all__ = [
     "Location",
@@ -71,4 +80,11 @@ __all__ = [
     "RouteQUBOReferenceComparison",
     "build_route_qubo_demo",
     "compare_route_qubo_to_classical",
+    "RouteExperimentSpec",
+    "SYNTHETIC_ROUTE_EXPERIMENTS",
+    "ExperimentConfiguration",
+    "ExperimentRun",
+    "RouteExperimentReport",
+    "run_route_experiments",
+    "export_experiment_report",
 ]
