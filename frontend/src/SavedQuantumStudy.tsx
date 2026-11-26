@@ -36,6 +36,7 @@ export default function SavedQuantumStudy() {
         <td>{metric(m.best_objective)}</td><td>{metric(m.mean_gap_percent, "%")}</td><td>{metric(m.mean_seconds, " s")}</td>
       </tr>)}</tbody></table>
     </div>
+    <p className="table-scroll-hint">Scroll the table horizontally to see all comparison metrics.</p>
     <p>Lower objectives are better. Optimal trials reached the best feasible objective over the generated routes. A dash means the measure is unavailable or inapplicable.</p>
   </section>;
 }

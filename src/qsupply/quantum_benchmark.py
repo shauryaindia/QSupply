@@ -40,7 +40,7 @@ class QuantumBenchmarkRecord:
     variable_count: int
     qaoa_depth: int | None
     shots: int | None
-    optimizer_iterations: int
+    optimizer_iterations: int | None
     random_seed: int | None
     exact_optimum: Real | None
     best_sampled_energy: Real | None
@@ -50,7 +50,7 @@ class QuantumBenchmarkRecord:
     best_sample_feasible: bool | None
     business_objective: Real | None
     circuit_depth: int | None
-    execution_time_seconds: float
+    execution_time_seconds: float | None
     execution_mode: str
     status: str
     penalized_model_minimum: Real | None = None
@@ -113,7 +113,7 @@ class QuantumBenchmarkSummary:
     optimal_feasible_success_probability: float | None
     mean_feasible_sample_fraction: float | None
     per_run_execution_times_seconds: tuple[float, ...]
-    aggregate_execution_time_seconds: float
+    aggregate_execution_time_seconds: float | None
     timing_scope: str
     execution_metadata: tuple[Mapping[str, object] | None, ...]
 
@@ -174,6 +174,8 @@ def benchmark_qaoa_backends_repeated(
     solvers: Sequence[Solver],
     *,
     seeds: Sequence[int],
+    record_backend_exceptions: bool = False,
+    stop_backend_on_failure: bool = False,
     exact_solver: ExactQUBOSolver | None = None,
 ) -> QuantumBenchmarkReport:
     """Run independent solver trials with explicit per-run seeds.
@@ -184,7 +186,9 @@ def benchmark_qaoa_backends_repeated(
     returned best assignment is feasible and matches the best feasible
     reference objective; it is not a hardware or population-level performance
     claim. If an adapter does not report the requested seed as applied, this
-    probability is unavailable.
+    probability is unavailable. With record_backend_exceptions enabled, raised
+    solver errors become failed trials. stop_backend_on_failure leaves later
+    seeds for that solver unexecuted and explicitly marked not_run.
     """
     _validate_inputs(problem_id, request, solvers)
     if isinstance(seeds, (str, bytes)) or not isinstance(seeds, Sequence) or not seeds:
@@ -209,21 +213,25 @@ def benchmark_qaoa_backends_repeated(
         problem_id, request, exact, feasible_reference, reference_elapsed
     )
     all_runs: list[QuantumBenchmarkRecord] = []
+    stopped_solvers: set[str] = set()
     for run_index, seed in enumerate(seeds, start=1):
         seeded_request = replace(request, random_seed=seed)
-        all_runs.extend(
-            _records_for_runs(
-                problem_id,
-                seeded_request,
-                solvers,
-                exact,
-                feasible_reference,
-                (seed,),
-                include_exact=False,
-                run_index=run_index,
-                feasible_reference_enumeration_seconds=reference_elapsed,
-            )
+        batch = _records_for_runs(
+            problem_id,
+            seeded_request,
+            solvers,
+            exact,
+            feasible_reference,
+            (seed,),
+            include_exact=False,
+            run_index=run_index,
+            stopped_solvers=stopped_solvers,
+            record_backend_exceptions=record_backend_exceptions or stop_backend_on_failure,
+            feasible_reference_enumeration_seconds=reference_elapsed,
         )
+        all_runs.extend(batch)
+        if stop_backend_on_failure:
+            stopped_solvers.update(record.solver_id for record in batch if record.status == "failed")
     summaries = tuple(
         _summarize(
             solver,
@@ -261,6 +269,8 @@ def _records_for_runs(
     seeds: tuple[int | None, ...],
     *,
     include_exact: bool = True,
+    stopped_solvers: set[str] | None = None,
+    record_backend_exceptions: bool = False,
     run_index: int | None = None,
     feasible_reference_enumeration_seconds: float | None = None,
 ) -> tuple[QuantumBenchmarkRecord, ...]:
@@ -282,7 +292,40 @@ def _records_for_runs(
             configuration=request.configuration,
             random_seed=seeds[0],
         )
-        result = solver.solve(ising_request)
+        failure_details = None
+        elapsed = None
+        if stopped_solvers and solver.metadata.solver_id in stopped_solvers:
+            status = "not_run"
+            failure_details = {"reason": "backend stopped after an earlier failed trial"}
+        else:
+            started = perf_counter()
+            try:
+                result = solver.solve(ising_request)
+            except Exception as error:
+                if not record_backend_exceptions:
+                    raise
+                elapsed = perf_counter() - started
+                status = "failed"
+                failure_details = {"error_type": type(error).__name__, "error": str(error)}
+        if failure_details is not None:
+            metadata = solver.metadata
+            records.append(QuantumBenchmarkRecord(
+                problem_id=problem_id, solver_id=metadata.solver_id, backend_name=metadata.name,
+                backend_version=None, backend_type=metadata.backend_type,
+                variable_count=len(request.variable_order), qaoa_depth=None, shots=None,
+                optimizer_iterations=None, random_seed=None, exact_optimum=exact.full_energy,
+                best_sampled_energy=None, absolute_energy_gap=None, relative_energy_gap_percent=None,
+                feasible_sample_fraction=None, best_sample_feasible=None, business_objective=None,
+                circuit_depth=None, execution_time_seconds=elapsed, execution_mode=_execution_mode(metadata.backend_type),
+                status=status, requested_seed=seeds[0], run_index=run_index,
+                timing_scope="not measured" if elapsed is None else "whole solver call (per run)",
+                penalized_model_minimum=exact.full_energy,
+                penalized_minimum_feasibility=_feasibility_status(exact.feasible),
+                best_feasible_business_objective=feasible_reference.business_objective,
+                best_feasible_full_energy=feasible_reference.full_energy,
+                execution_metadata=MappingProxyType(failure_details),
+            ))
+            continue
         energy = result.full_energy
         exact_energy = exact.full_energy
         absolute_gap: Real | None = None
@@ -293,6 +336,9 @@ def _records_for_runs(
                 relative_gap = float(absolute_gap / abs(exact_energy) * 100)
         configuration: dict[str, Any] = dict(result.configuration)
         metadata = result.execution_metadata
+        details = metadata.as_dict() if metadata is not None else {}
+        if result.error:
+            details["error"] = result.error
         records.append(
             QuantumBenchmarkRecord(
                 problem_id=problem_id,
@@ -332,9 +378,7 @@ def _records_for_runs(
                 ),
                 timing_scope="whole solver call (per run)",
                 feasible_reference_enumeration_time_seconds=feasible_reference_enumeration_seconds,
-                execution_metadata=(
-                    MappingProxyType(metadata.as_dict()) if metadata is not None else None
-                ),
+                execution_metadata=MappingProxyType(details) if details else None,
                 requested_seed=seeds[0],
                 seed_applied=(
                     result.random_seed == seeds[0] if seeds[0] is not None else None
@@ -453,6 +497,18 @@ def _validation_is_feasible(validation: Any) -> bool:
     raise TypeError("validator must return bool or an object with a feasible attribute")
 
 
+def optimal_feasible_rate(reference: Real | None,
+                          trials: Sequence[tuple[bool | None, bool, Real | None]]) -> float | None:
+    """Fraction of all requested trials returning a validated exact match.
+
+    Each trial supplies seed confirmation, completed-and-feasible status, and
+    independently scored objective. Missing references or seed evidence give null.
+    """
+    if reference is None or not trials or any(seed is not True for seed, _, _ in trials):
+        return None
+    return sum(valid and value == reference for _, valid, value in trials) / len(trials)
+
+
 def _summarize(solver: Solver, runs: tuple[QuantumBenchmarkRecord, ...], request: SolverRequest,
                feasible_reference: _FeasibleReference) -> QuantumBenchmarkSummary:
     use_business = request.business_objective is not None
@@ -476,29 +532,13 @@ def _summarize(solver: Solver, runs: tuple[QuantumBenchmarkRecord, ...], request
         sum(run.feasibility_status == "feasible" for run in known) / len(known)
         if known else None
     )
-    if request.validator is None:
-        optimal_success = None
-    elif not runs or any(run.seed_applied is not True for run in runs):
-        # A requested seed alone does not prove the backend used it.
-        optimal_success = None
-    elif use_business and feasible_reference.business_objective is not None:
-        successes = sum(
-            run.feasibility_status == "feasible"
-            and run.business_objective == feasible_reference.business_objective
-            for run in runs
-        )
-        optimal_success = successes / len(runs) if runs else None
-    elif not use_business and feasible_reference.full_energy is not None:
-        successes = sum(
-            run.feasibility_status == "feasible"
-            and run.best_sampled_energy == feasible_reference.full_energy
-            for run in runs
-        )
-        optimal_success = successes / len(runs) if runs else None
-    else:
-        optimal_success = None
+    reference = feasible_reference.business_objective if use_business else feasible_reference.full_energy
+    optimal_success = optimal_feasible_rate(reference, [
+        (run.seed_applied, run.status == "completed" and run.best_sample_feasible is True, value)
+        for run, value in zip(runs, values, strict=True)
+    ])
     fractions = [run.feasible_sample_fraction for run in runs if run.feasible_sample_fraction is not None]
-    times = tuple(run.execution_time_seconds for run in runs)
+    times = tuple(run.execution_time_seconds for run in runs if run.execution_time_seconds is not None)
     return QuantumBenchmarkSummary(
         solver_id=solver.metadata.solver_id,
         backend_name=runs[0].backend_name if runs else solver.metadata.name,
@@ -514,7 +554,7 @@ def _summarize(solver: Solver, runs: tuple[QuantumBenchmarkRecord, ...], request
         optimal_feasible_success_probability=optimal_success,
         mean_feasible_sample_fraction=(float(fmean(fractions)) if fractions else None),
         per_run_execution_times_seconds=times,
-        aggregate_execution_time_seconds=sum(times),
+        aggregate_execution_time_seconds=sum(times) if times else None,
         timing_scope="per-run whole solver call; aggregate is the sum of run wall times",
         execution_metadata=tuple(run.execution_metadata for run in runs),
     )

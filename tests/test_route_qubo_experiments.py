@@ -4,15 +4,18 @@ import csv
 import json
 import tempfile
 import unittest
+from dataclasses import replace
+from unittest.mock import patch
 from fractions import Fraction
 
-from qsupply.backends.qiskit import QiskitBackend
+from qsupply.backends.qiskit import QiskitBackend, QiskitQAOASolver
 from qsupply.backends.qulacs import QulacsBackend
 from qsupply.backends.registry import QuantumBackendRegistration, QuantumBackendRegistry
 from qsupply.execution import ExecutionMode
 from qsupply.network import ObjectiveWeights
 from qsupply.network.route_qubo_experiments import (
     ExperimentConfiguration,
+    _aggregate_runs,
     RouteExperimentSpec,
     export_experiment_report,
     run_route_experiments,
@@ -76,6 +79,68 @@ class TestRouteQUBOExperiments(unittest.TestCase):
         self.assertTrue(all(row.execution_time_seconds is None for row in rows))
         self.assertTrue(any(row.solver == "exact-qubo" for row in report.runs))
 
+    @unittest.skipUnless(QiskitBackend.is_available(), "Qiskit SDK required")
+    def test_middle_seed_exception_continues_or_marks_pending_trial_not_run(self):
+        solve = QiskitQAOASolver.solve
+        for stop in (False, True):
+            calls = []
+            def inject(solver, request):
+                calls.append(request.random_seed)
+                if request.random_seed == 22:
+                    raise RuntimeError("seed 22 injected error")
+                return solve(solver, request)
+            with self.subTest(stop=stop), patch.object(QiskitQAOASolver, "solve", inject):
+                report = run_route_experiments(
+                    specs=(RouteExperimentSpec("middle", ("EXP-104", "EXP-407")),),
+                    weights_by_profile={"balanced": ObjectiveWeights()}, backends=("qiskit",),
+                    seeds=(11, 22, 33), iterations=1, shots=16, stop_backend_on_failure=stop,
+                )
+                rows = [r for r in report.runs if r.solver == "qiskit"]
+                self.assertEqual([r.configuration.random_seed for r in rows], [11, 22, 33])
+                self.assertEqual([r.status for r in rows], ["completed", "failed", "not_run" if stop else "completed"])
+                self.assertEqual(calls, [11, 22] if stop else [11, 22, 33])
+                self.assertIsNotNone(rows[0].assignment)
+                self.assertEqual(rows[1].backend_metadata["error"], "seed 22 injected error")
+                self.assertIsNotNone(rows[1].execution_time_seconds)
+                for row in rows[1:3 if stop else 2]:
+                    self.assertIsNone(row.assignment)
+                    self.assertIsNone(row.feasible)
+                    self.assertIsNone(row.full_penalized_energy)
+                    self.assertIsNone(row.business_objective)
+                if stop:
+                    self.assertIsNone(rows[2].execution_time_seconds)
+                else:
+                    self.assertIsNotNone(rows[2].assignment)
+
+    def test_summary_matches_exact_values_without_using_gap(self):
+        report = run_route_experiments(
+            specs=(RouteExperimentSpec("small", ("EXP-104",)),),
+            weights_by_profile={"balanced": ObjectiveWeights()}, backends=(), seeds=(11,),
+        )
+        exact = report.runs[0]
+        for reference, feasible, value, expected in (
+            ("0", True, "0", 1), ("0", True, "1", 0),
+            ("2/3", True, "2/3", 1), ("2/3", True, "20000000000000001/30000000000000000", 0),
+            (None, False, None, None), (None, True, "1", None),
+        ):
+            reference_row = replace(exact, feasible=feasible, business_objective=reference)
+            trial = replace(exact, solver="qiskit", feasible=feasible, business_objective=value,
+                            optimal_feasible_gap_percent=None, backend_metadata={"seed_applied": True})
+            summary = _aggregate_runs((reference_row, trial))[-1]
+            self.assertEqual(summary["optimal_feasible_success_probability"], expected)
+
+    @unittest.skipUnless(QiskitBackend.is_available(), "Qiskit SDK required")
+    def test_proven_infeasible_has_no_success_rate_in_either_summary(self):
+        report = run_route_experiments(
+            specs=(RouteExperimentSpec("portfolio-15", ("EXP-104", "EXP-205", "EXP-508"),
+                                       2, "synthetic-suez-capacity-restriction"),),
+            weights_by_profile={"balanced": ObjectiveWeights()}, backends=("qiskit",),
+            seeds=(11,), iterations=1, shots=16,
+        )
+        self.assertFalse(report.runs[0].feasible)
+        for summary in report.summaries:
+            self.assertIsNone(summary["optimal_feasible_success_probability"])
+
     def test_unknown_backend_is_rejected(self):
         with self.assertRaises(KeyError):
             run_route_experiments(backends=("not-registered",))
@@ -89,10 +154,15 @@ class TestRouteQUBOExperiments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             manifest, runs, summary = export_experiment_report(report, temporary)
             self.assertEqual(json.loads(manifest.read_text())["schema_version"], 1)
-            self.assertEqual(len(json.loads(runs.read_text())), 2)
+            exported_runs = json.loads(runs.read_text())
+            self.assertEqual(len(exported_runs), 2)
+            instance = json.loads(manifest.read_text())["instances"][0]
             with summary.open(newline="") as stream:
                 rows = list(csv.DictReader(stream))
                 self.assertEqual(len(rows), 2)
+                for field in ("domain_fingerprint", "qubo_fingerprint"):
+                    self.assertRegex(instance[field], r"^[0-9a-f]{64}$")
+                    self.assertTrue(all(r[field] == instance[field] for r in rows + exported_runs))
                 self.assertEqual(rows[0]["mean_full_energy_exact"], rows[0]["best_full_energy"])
             with self.assertRaises(FileExistsError):
                 export_experiment_report(report, temporary)

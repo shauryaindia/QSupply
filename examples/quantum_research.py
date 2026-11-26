@@ -1,6 +1,7 @@
 """Generate the Milestone 7B synthetic route study and its dashboard snapshot."""
 import argparse
 import csv
+import hashlib
 import json
 from collections import Counter
 from dataclasses import asdict
@@ -11,6 +12,7 @@ from random import Random
 from statistics import mean
 from time import perf_counter
 
+from qsupply.quantum_benchmark import optimal_feasible_rate
 from qsupply.network import ObjectiveWeights, UnsupportedRouteQUBOError, assign_routes
 from qsupply.network.global_demo import global_demo_network, global_demo_shipments
 from qsupply.network.route_qubo_experiments import (
@@ -48,15 +50,19 @@ def summarize(method, rows, reference):
     objectives = [Fraction(r["business_objective"]) for r in feasible]
     gaps = [r["optimal_feasible_gap_percent"] for r in feasible if r["optimal_feasible_gap_percent"] is not None]
     times = [r["execution_time_seconds"] for r in rows if r["execution_time_seconds"] is not None]
-    seeded = all((r["backend_metadata"] or {}).get("seed_applied") is True for r in rows)
+    success_rate = optimal_feasible_rate(reference, [
+        ((r["backend_metadata"] or {}).get("seed_applied"),
+         r["status"] == "completed" and r["feasible"] is True,
+         Fraction(r["business_objective"]) if r["business_objective"] is not None else None)
+        for r in rows
+    ])
     evaluable = [r for r in completed if r["feasible"] is not None]
     metadata = [r["backend_metadata"] or {} for r in completed]
     depths = sorted({m["circuit_depth"] for m in metadata if m.get("circuit_depth") is not None})
     evaluations = [m["optimizer_evaluations"] for m in metadata if m.get("optimizer_evaluations") is not None]
     return dict(method=method, outcomes=dict(Counter(r["status"] for r in rows)), circuit_depths=depths, optimizer_evaluations=sum(evaluations) if evaluations else None, trials=len(rows), completed=len(completed), feasible=len(feasible),
                 feasibility_rate=len(feasible)/len(evaluable) if evaluable else None,
-                optimal_rate=(sum(v == reference for v in objectives)/len(rows)
-                              if seeded and reference is not None else None),
+                optimal_rate=success_rate,
                 best_objective=float(min(objectives)) if objectives else None,
                 mean_gap_percent=mean(gaps) if gaps else None,
                 mean_seconds=mean(times) if times else None)
@@ -86,20 +92,24 @@ def run_study():
                          business_objective=None, optimal_feasible_gap_percent=None, backend_metadata=None)]
             ref = None
             case.update(variables=error.variable_count, candidates=sum(map(len, comparison.recovery_candidates.values())),
-                        exact=None, reason=str(error))
+                        exact=None, domain_fingerprint=error.domain_fingerprint, qubo_fingerprint=None, reason=str(error))
         else:
             instance = report.manifest["instances"][0]
             rows = [r.to_dict() for r in report.runs]
             optimum = instance["exact_best_feasible_objective"]
             ref = Fraction(optimum) if optimum is not None else None
             case.update(variables=instance["variables"], candidates=instance["candidate_routes"],
+                        domain_fingerprint=instance["domain_fingerprint"], qubo_fingerprint=instance["qubo_fingerprint"],
                         exact=str(ref) if ref is not None else None, fingerprint=instance["fingerprint"],
                         reason=None if ref is not None else "No feasible plan over these candidates.")
         case["methods"] = [summarize(m, [r for r in rows if r["solver"] == m], ref)
                            for m in dict.fromkeys(r["solver"] for r in rows)]
-        trials.extend(dict(instance=spec.problem_id, **r) for r in rows)
+        trials.extend(dict(r, instance=spec.problem_id, domain_fingerprint=case["domain_fingerprint"],
+                           qubo_fingerprint=case["qubo_fingerprint"]) for r in rows)
         cases.append(case)
     return dict(software_versions=next(r["configuration"]["software_versions"] for r in trials if "configuration" in r),
+                generator_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                selected_backends=("qiskit", "qulacs"),
                 generation_seed=GENERATION_SEED, seeds=TRIAL_SEEDS, depth=1, iterations=2,
                 optimizer="spsa", shots=64, cases=cases), trials
 
@@ -124,11 +134,12 @@ def write_report(directory, study, trials):
                   "", "## Measured results", "", "| Instance | Method | Feasible / trials | Optimal rate | Best objective | Mean feasible gap (%) | Mean solver time (s) |",
                   "|---|---|---:|---:|---:|---:|---:|"])
     with (directory / "summary.csv").open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=["instance", *study["cases"][0]["methods"][0]], lineterminator="\n")
+        writer = csv.DictWriter(stream, fieldnames=["instance", "domain_fingerprint", "qubo_fingerprint", *study["cases"][0]["methods"][0]], lineterminator="\n")
         writer.writeheader()
         for c in study["cases"]:
             for m in c["methods"]:
-                writer.writerow(dict(instance=c["id"], **{k: json.dumps(v) if isinstance(v, (dict, list)) else v for k,v in m.items()}))
+                writer.writerow(dict(instance=c["id"], domain_fingerprint=c["domain_fingerprint"],
+                                     qubo_fingerprint=c["qubo_fingerprint"], **{k: json.dumps(v) if isinstance(v, (dict, list)) else v for k,v in m.items()}))
                 count = f"{m['feasible']}/{m['trials']}" if m["feasibility_rate"] is not None else ", ".join(m["outcomes"])
                 lines.append(f"| {c['id']} | {m['method']} | {count} | {display(m['optimal_rate'])} | {display(m['best_objective'])} | {display(m['mean_gap_percent'])} | {display(m['mean_seconds'])} |")
     lines.extend(["", "## Observations", ""])
@@ -145,6 +156,7 @@ def write_report(directory, study, trials):
             lines.append(f"- {c['id']}: {c['reason']}")
     versions = study["software_versions"]
     lines.extend(["", "## Simulator execution", "",
+                  f"QSupply measurement revision: `{versions['qsupply']}`.", "",
                   f"Local Python {versions['python']}, Qiskit {versions['qiskit']} and Qulacs {versions['qulacs']}. Depth below is the native circuit depth before measurement. Evaluations count optimizer sampling calls, excluding the final measurement.",
                   "", "| Case | Simulator | Circuit depth | Optimizer evaluations across trials |", "|---|---|---:|---:|"])
     for case in study["cases"]:

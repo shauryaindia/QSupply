@@ -912,13 +912,26 @@ describe("QSupply dashboard interactions", () => {
     expect(screen.getByText("Objective weights: 100% · valid")).toBeInTheDocument();
   });
 
+  it("opens the bundled study during an API outage without mounting live solver controls", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.health).mockRejectedValueOnce(new Error("offline"));
+    render(<App />);
+    await screen.findByRole("heading", { name: "QSupply API unavailable" });
+    await user.click(screen.getByRole("button", { name: /Quantum computing/ }));
+    const study = await screen.findByRole("region", { name: "Saved quantum benchmark" });
+    await user.selectOptions(within(study).getByLabelText("Benchmark instance"), "size-control");
+    expect(within(study).getByText(/route assignment requires 19 binary variables/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run QAOA experiment" })).toBeNull();
+    expect(api.runQuantumQAOA).not.toHaveBeenCalled();
+  });
+
   it("withholds dashboard data after API failure and recovers through manual retry", async () => {
     const user = userEvent.setup();
     vi.mocked(api.health).mockRejectedValueOnce(new Error("backend is starting"));
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "QSupply API unavailable" })).toBeInTheDocument();
-    expect(screen.getByText("Dashboard data is withheld until the configured backend responds.")).toBeInTheDocument();
+    expect(screen.getByText("Live dashboard data requires an API connection. Saved benchmarks are available under Quantum computing.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Control tower", level: 1 })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry connection" }));
     expect(await screen.findByRole("heading", { name: "Control tower", level: 1 })).toBeInTheDocument();

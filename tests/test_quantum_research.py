@@ -6,7 +6,8 @@ from fractions import Fraction
 from pathlib import Path
 
 from examples.quantum_research import PROFILES, TRIAL_SEEDS, catalogue
-from qsupply.network.route_qubo_experiments import _problem
+from qsupply.network import UnsupportedRouteQUBOError
+from qsupply.network.route_qubo_experiments import identified_route_problem
 
 
 class TestSavedResearch(unittest.TestCase):
@@ -24,12 +25,19 @@ class TestSavedResearch(unittest.TestCase):
             self.assertEqual(case["id"], spec.problem_id)
             records = [r for r in runs if r["instance"] == spec.problem_id]
             if spec.problem_id == "size-control":
+                with self.assertRaises(UnsupportedRouteQUBOError) as stopped:
+                    identified_route_problem(spec, PROFILES[profile])
+                self.assertEqual(case["domain_fingerprint"], stopped.exception.domain_fingerprint)
+                self.assertRegex(case["domain_fingerprint"], r"^[0-9a-f]{64}$")
+                self.assertIsNone(case["qubo_fingerprint"])
                 self.assertGreater(case["variables"], 12)
                 exact = next(r for r in records if r["solver"] == "exact-qubo")
                 self.assertEqual(exact["status"], "unavailable")
                 self.assertIsNone(case["exact"])
                 continue
-            model, _ = _problem(spec, PROFILES[profile])
+            model, _, domain, qubo = identified_route_problem(spec, PROFILES[profile])
+            self.assertEqual((domain, qubo), (case["domain_fingerprint"], case["qubo_fingerprint"]))
+            self.assertNotEqual(domain, qubo)
             for r in records:
                 if r["assignment"] is None:
                     self.assertNotEqual(r["status"], "completed")

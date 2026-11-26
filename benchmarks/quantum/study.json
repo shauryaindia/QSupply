@@ -1,7 +1,7 @@
 {
   "software_versions": {
     "python": "3.13.3",
-    "qsupply": "source-tree",
+    "qsupply": "e2dbe6c7a136b73f88ea67e1343c79eab8648689",
     "qiskit": "2.6.2",
     "qulacs": "0.6.14"
   },
@@ -108,7 +108,9 @@
           "mean_gap_percent": 0.28048201988175275,
           "mean_seconds": 0.06621723319985903
         }
-      ]
+      ],
+      "domain_fingerprint": "12ca902136af28d88a81970a362b8fcc8bf237339a0d5d8168ec8531c5ed76e0",
+      "qubo_fingerprint": "be0ac347cfcd531bfd53dc0ca4ac38457c1dbb484a77fc97f62c65ed6577b0f7"
     },
     {
       "id": "route-qubo-10",
@@ -201,7 +203,9 @@
           "mean_gap_percent": 43.18658280922432,
           "mean_seconds": 0.07364391660667025
         }
-      ]
+      ],
+      "domain_fingerprint": "6bb2d91a65720b915593144ffcadff2af49e7fecdb033b0fde33a34bca28835e",
+      "qubo_fingerprint": "634ba19cab364a77443dbfea33cf763d3a54673ad62a3f6a6fff016a08cbedd7"
     },
     {
       "id": "route-qubo-11",
@@ -294,7 +298,9 @@
           "mean_gap_percent": 7.425670288449943,
           "mean_seconds": 0.08886605859734117
         }
-      ]
+      ],
+      "domain_fingerprint": "5888a26a656ad34077ab4f9675d488c63c7d0e892ffb3e35cc200d9079365e7a",
+      "qubo_fingerprint": "3d24f19a9d52e9453f7c00f8a6aedf7eb7edb13885e55680fd6ee64d0a1e20e6"
     },
     {
       "id": "route-qubo-12",
@@ -388,7 +394,9 @@
           "mean_gap_percent": 3.6550667542131747,
           "mean_seconds": 0.06257915799506009
         }
-      ]
+      ],
+      "domain_fingerprint": "cd450bda4b913babaeb73a89e905964bcd32c10e0e0ec2431021c32e208d8dfa",
+      "qubo_fingerprint": "1d2ea7bf1565320495c6e361dee79037fa899d4d7412862208e8dab34063712a"
     },
     {
       "id": "portfolio-01",
@@ -444,7 +452,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.001064958021743223
         }
-      ]
+      ],
+      "domain_fingerprint": "e9abbd2411f2cfa7438a9ef153720757cb3b57a1fb5053cc2d2088ea40625ec2",
+      "qubo_fingerprint": "7bd144146d4dc58245afafb88cbdf037350305c48adc1a45d52e3ba96308bce2"
     },
     {
       "id": "portfolio-02",
@@ -501,7 +511,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0023852910089772195
         }
-      ]
+      ],
+      "domain_fingerprint": "d7395b50382ac78841acc8e1925ce9d51a50fb29e6dd93d7fd7e20642ce14e88",
+      "qubo_fingerprint": "f717cceecd116badabf21323fca45f90c50dfed2cb8fa57a4ba39e5b62823aec"
     },
     {
       "id": "portfolio-03",
@@ -558,7 +570,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.001967666990822181
         }
-      ]
+      ],
+      "domain_fingerprint": "b18b1b434a247a2d6f61acff3f7bf8062e8e3aa126e29b1234df60eb9efcbf61",
+      "qubo_fingerprint": "40a77ba8ece970355dcf3e9a9c0e67f7e607063901e59d35ec6fd2c56979d6e2"
     },
     {
       "id": "portfolio-04",
@@ -614,7 +628,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.002003750007133931
         }
-      ]
+      ],
+      "domain_fingerprint": "ad455cd7a58bd10c4f28549ed9b458bafaec0cbd59f713f2da17c6c06632918e",
+      "qubo_fingerprint": "0b58b912416b50c40c9c5d546b4cd7c1da3731490fc02af22a16385b476f7f25"
     },
     {
       "id": "portfolio-05",
@@ -670,7 +686,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0010866669763345271
         }
-      ]
+      ],
+      "domain_fingerprint": "46f511d20570d4f272658fe716ede6351419719e5a0fafe73ed8ea7ce056891c",
+      "qubo_fingerprint": "328c646e592df0c4ae634bf5bc1a2b70dd600452f07f89903c0afbe47c2a4a4c"
     },
     {
       "id": "portfolio-06",
@@ -726,7 +744,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0011628339998424053
         }
-      ]
+      ],
+      "domain_fingerprint": "4204581df56a611929f96a2fb07d9aeda7607e6af820098e50b23957c2a95a66",
+      "qubo_fingerprint": "f9dc2810f81f157d79673e9e16206424ffbca09c376ca43fb512ea8afef6a180"
     },
     {
       "id": "portfolio-07",
@@ -782,7 +802,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.001165916008176282
         }
-      ]
+      ],
+      "domain_fingerprint": "1c4f61d3bb9c4f53c2355d8c36c4cae66e5ec3fec4f3e02c937f037afc7947cc",
+      "qubo_fingerprint": "fa3c629ea126c4137bcb4740c5267683b98ff3ae5725b3b2753795e1b53d2166"
     },
     {
       "id": "portfolio-08",
@@ -838,7 +860,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0014324169897008687
         }
-      ]
+      ],
+      "domain_fingerprint": "94d37c182392128269449360f0f9fda175ddd5bc96ae766fed22ad75b08275d1",
+      "qubo_fingerprint": "52b724b2c66826d450da89bd73b5f5418f2b46a716a3db2d9dc1d5693db41719"
     },
     {
       "id": "portfolio-09",
@@ -895,7 +919,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0014751249982509762
         }
-      ]
+      ],
+      "domain_fingerprint": "d7aea41677a6be427a083def0571f0dd3a4a26feaa43de729b32d4424d43ee68",
+      "qubo_fingerprint": "d860211d90e350ef39fd876526cc6e23034fc5b9530f209806f75b0bf298eeab"
     },
     {
       "id": "portfolio-10",
@@ -951,7 +977,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0015950000088196248
         }
-      ]
+      ],
+      "domain_fingerprint": "24d142ac5cd91c73b8e133a31caee7b46c9f20a702833c4e48c3231dc38f052e",
+      "qubo_fingerprint": "c408f04897a44c1f7c98d9e958a32c5e494a0013049ebef18d5e2b98c15aa15c"
     },
     {
       "id": "portfolio-11",
@@ -1006,7 +1034,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0005884999991394579
         }
-      ]
+      ],
+      "domain_fingerprint": "849d9b84379cac38fe25e8554be79343e3fa1c3db9bef4f992e47a65f0095379",
+      "qubo_fingerprint": "4d2fe50dab68663f84e98f773fd83aeb80ab6dc3792e1c27e7bd429eb8daf45e"
     },
     {
       "id": "portfolio-12",
@@ -1062,7 +1092,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0015413330111186951
         }
-      ]
+      ],
+      "domain_fingerprint": "6ec44387dd6c2ddab99fd5ea6f1526ada657374e4013ce64e8ed044ad687f52a",
+      "qubo_fingerprint": "f82d7d5499869c445b75b7cf0628954c56bfbd267177a333bffadb12490772ee"
     },
     {
       "id": "portfolio-13",
@@ -1118,7 +1150,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.001006249978672713
         }
-      ]
+      ],
+      "domain_fingerprint": "97f3cdc6f898f7b3351b818c34ea7b6b7422d285aba161652aff4ddf13002106",
+      "qubo_fingerprint": "b0416966d87d5289242c894ae8c2c2433df045bbcab3edf533ab388afe75ffb8"
     },
     {
       "id": "portfolio-14",
@@ -1175,7 +1209,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0021422909921966493
         }
-      ]
+      ],
+      "domain_fingerprint": "f8f4d6c6d1de4d7ed629c938cdfef55474a730d8c41a7ec30cee867e6c12c4b6",
+      "qubo_fingerprint": "d5eeb18c8d870986521491911310d65bcc5a4662d5638cb80aa585a82e753b49"
     },
     {
       "id": "portfolio-15",
@@ -1232,7 +1268,9 @@
           "mean_gap_percent": null,
           "mean_seconds": 0.001201000006403774
         }
-      ]
+      ],
+      "domain_fingerprint": "fa9f8eab303494b1ca1fad37d7ae9bf19345ac0c0ab916742eac8088d43dba05",
+      "qubo_fingerprint": "bece6876e87e09959f784733c6b4332ff10a63059d6b78514b78841aa8b6092c"
     },
     {
       "id": "portfolio-16",
@@ -1289,7 +1327,9 @@
           "mean_gap_percent": 0.0,
           "mean_seconds": 0.0021114590053912252
         }
-      ]
+      ],
+      "domain_fingerprint": "5085e3331a56d9b7853b8d938f76e22c9faa71ef95f7ff30e5eac24594230fce",
+      "qubo_fingerprint": "fa2ff047d8332fec689524ce650e124e7956438bbbad87b413aa8d549e800802"
     },
     {
       "id": "size-control",
@@ -1349,7 +1389,14 @@
           "mean_gap_percent": null,
           "mean_seconds": null
         }
-      ]
+      ],
+      "domain_fingerprint": "dfdcab774110c75ddde761777f2214c6c0a4bc7d1315f08920b17df3ba6f8193",
+      "qubo_fingerprint": null
     }
+  ],
+  "generator_sha256": "245f0c6b3285b7abb6bf89eac684d75d5814ff6734baaf450a6f2a31cae39b76",
+  "selected_backends": [
+    "qiskit",
+    "qulacs"
   ]
 }

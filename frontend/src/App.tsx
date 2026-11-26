@@ -2469,7 +2469,13 @@ export default function App() {
           </div>
         </header>
         <div className="content-area">
-          {loading && !connected ? (
+          {!connected && page === "quantum" ? (
+            <>
+              <PageHeader page="quantum" eyebrow="PLATFORM / QUANTUM EXECUTION" />
+              <p role="status">{loading ? "Checking API connection…" : "API unavailable."} Live solver execution requires an API connection.</p>
+              <Suspense fallback={<p>Loading saved benchmark results…</p>}><SavedQuantumStudy /></Suspense>
+            </>
+          ) : loading && !connected ? (
             <div className="loading-page">
               <span className="spinner large" />
               <strong>Connecting to QSupply API</strong>
@@ -2480,7 +2486,7 @@ export default function App() {
               <div className="failure-icon">!</div>
               <h1>QSupply API unavailable</h1>
               <p>{loadError || "The health endpoint did not report a healthy API."}</p>
-              <p>Dashboard data is withheld until the configured backend responds.</p>
+              <p>Live dashboard data requires an API connection. Saved benchmarks are available under Quantum computing.</p>
               <button className="primary-button" onClick={() => void refresh()} disabled={loading}>
                 {loading ? "Retrying connection…" : "Retry connection"}
               </button>

@@ -100,6 +100,8 @@ Balanced weights are 40/25/20/15 for cost/time/carbon/exposure. Carbon and time 
 
 ## Simulator execution
 
+QSupply measurement revision: `e2dbe6c7a136b73f88ea67e1343c79eab8648689`.
+
 Local Python 3.13.3, Qiskit 2.6.2 and Qulacs 0.6.14. Depth below is the native circuit depth before measurement. Evaluations count optimizer sampling calls, excluding the final measurement.
 
 | Case | Simulator | Circuit depth | Optimizer evaluations across trials |

@@ -112,3 +112,35 @@ from existing floating-point synthetic route data even though QUBO arithmetic
 preserves exact stored rational representations. The benchmark therefore
 validates formulation and repeatable software behavior, not deployment
 performance, operational forecast quality or quantum advantage.
+
+### Trial outcomes and study provenance
+
+Each requested seed has its own run row. By default, a solver exception records
+that seed's error and elapsed solver-call time, then the next seed executes.
+With `stop_backend_on_failure=True`, remaining seeds for that backend have
+status `not_run` and null measurements. Setup failures also leave trials
+unexecuted. Applications can distinguish these rows from missing SDKs
+(`unavailable`) and executed trials that return an infeasible plan.
+
+Optimal-feasible success counts completed, independently feasible trials whose
+scored objective exactly equals the feasible reference, divided by requested
+trials. It is unavailable without a feasible reference or confirmation of all
+requested seeds. A zero reference supports this equality test while leaving
+the percentage gap undefined.
+
+The instance manifest identifies the validated domain before applying the
+size limit. Its SHA-256 input includes the synthetic specification, network
+and units, shipment profiles, disruption overlay, fixed normalization,
+objective weights and ordered candidate routes. A separate QUBO SHA-256
+covers the variable order, sorted ordered-pair coefficients and offset; it
+is null when formulation exceeds the guard. Earlier combined fingerprints
+remain available for existing consumers.
+
+In the saved research exports, join each run to study.json by instance ID.
+summary.csv repeats both digests. The archive identifies the 7B measurement
+source by Git commit. The archived run configurations and measured times
+are retained as recorded. New executions identify the Python package by a
+digest of relative source paths and file hashes, including uncommitted edits.
+The study records the generator file hash, SDK versions, selected backends,
+catalogue seed, trial seeds and optimizer settings. The Quantum Computing page
+can display this saved snapshot during an API outage.

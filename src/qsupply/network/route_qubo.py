@@ -33,6 +33,7 @@ MAX_ROUTE_QUBO_VARIABLES = min(
 
 class UnsupportedRouteQUBOError(ValueError):
     """Raised when an assignment formulation exceeds the explicit variable cap."""
+    domain_fingerprint: str | None = None
     variable_count: int | None = None
 
 

@@ -14,6 +14,7 @@ import json
 import math
 import platform
 from dataclasses import asdict, dataclass, fields, is_dataclass
+from datetime import datetime
 from fractions import Fraction
 from math import sqrt
 from pathlib import Path
@@ -25,11 +26,11 @@ from typing import Any, Mapping, Sequence
 from ..backends.registry import DEFAULT_QUANTUM_BACKEND_REGISTRY
 from ..ising import qubo_to_ising
 from ..qaoa import QAOAConfig
-from ..quantum_benchmark import benchmark_qaoa_backends_repeated
+from ..quantum_benchmark import benchmark_qaoa_backends_repeated, optimal_feasible_rate
 from ..solver import ExactQUBOSolver, ProblemRepresentation
 from .global_demo import global_demo_disruptions, global_demo_network, global_demo_shipments
 from .planning import ObjectiveWeights, assign_routes, compare_recovery
-from .route_qubo import MAX_ROUTE_QUBO_VARIABLES, formulate_route_assignment_qubo
+from .route_qubo import UnsupportedRouteQUBOError, formulate_route_assignment_qubo
 from .route_qubo_demo import ROUTE_QUBO_DEMO_SCENARIO
 
 
@@ -84,6 +85,10 @@ def _freeze(value: Any) -> Any:
 
 
 def _json_value(value: Any) -> Any:
+    if isinstance(value, frozenset):
+        return sorted(_json_value(item) for item in value)
+    if isinstance(value, datetime):
+        return value.isoformat()
     if is_dataclass(value):
         return {item.name: _json_value(getattr(value, item.name)) for item in fields(value)}
     if isinstance(value, Mapping):
@@ -185,6 +190,8 @@ class ExperimentRun:
     execution_time_seconds: float | None
     timing_scope: str
     backend_metadata: Mapping[str, Any] | None
+    domain_fingerprint: str | None = None
+    qubo_fingerprint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {item.name: _json_value(getattr(self, item.name)) for item in fields(self)}
@@ -216,21 +223,24 @@ def _aggregate_runs(runs: Sequence[ExperimentRun]) -> tuple[Mapping[str, Any], .
     for run in runs:
         profile = run.configuration.objective_profile
         groups.setdefault((run.configuration.problem_id, profile, run.solver), []).append(run)
+    references = {
+        (r.configuration.problem_id, r.configuration.objective_profile): Fraction(r.business_objective)
+        for r in runs if r.solver == "exact-qubo" and r.status == "completed"
+        and r.feasible is True and r.business_objective is not None
+    }
     result: list[Mapping[str, Any]] = []
     for (problem_id, profile, solver), records in groups.items():
         energies = [Fraction(run.full_penalized_energy) for run in records if run.full_penalized_energy is not None]
         objectives = [Fraction(run.business_objective) for run in records if run.business_objective is not None]
         evaluated = [run.feasible for run in records if run.feasible is not None]
         times = [run.execution_time_seconds for run in records if run.execution_time_seconds is not None]
-        quantum = solver in {"qiskit", "qulacs"}
-        seeds_applied = [run.backend_metadata.get("seed_applied")
-                         for run in records if run.backend_metadata is not None]
-        success_probability: float | None = None
-        if quantum and len(seeds_applied) == len(records) and all(value is True for value in seeds_applied):
-            success_probability = sum(
-                run.feasible is True and run.optimal_feasible_gap_percent == 0
-                for run in records
-            ) / len(records)
+        reference = references.get((problem_id, profile))
+        success_probability = optimal_feasible_rate(reference, [
+            ((run.backend_metadata or {}).get("seed_applied"),
+             run.status == "completed" and run.feasible is True,
+             Fraction(run.business_objective) if run.business_objective is not None else None)
+            for run in records
+        ])
         energy_mean = sum(energies, Fraction(0)) / len(energies) if energies else None
         objective_mean = sum(objectives, Fraction(0)) / len(objectives) if objectives else None
         energy_variance = (sum(((value - energy_mean) ** 2 for value in energies), Fraction(0)) / len(energies)
@@ -239,6 +249,8 @@ def _aggregate_runs(runs: Sequence[ExperimentRun]) -> tuple[Mapping[str, Any], .
                               if objectives and objective_mean is not None else None)
         result.append(MappingProxyType({
             "summary_kind": "experiment_group", "problem_id": problem_id,
+            "domain_fingerprint": records[0].domain_fingerprint,
+            "qubo_fingerprint": records[0].qubo_fingerprint,
             "profile": profile, "solver": solver, "run_count": len(records),
             "energy_count": len(energies), "best_full_energy": str(min(energies)) if energies else None,
             "worst_full_energy": str(max(energies)) if energies else None,
@@ -278,14 +290,46 @@ def prepare_route_candidates(spec: RouteExperimentSpec, weights: ObjectiveWeight
     return profiles, scenario, comparison
 
 
-def _problem(spec: RouteExperimentSpec, weights: ObjectiveWeights):
+def _digest(value):
+    return hashlib.sha256(_canonical_json(value).encode()).hexdigest()
+
+
+def source_revision():
+    """Content revision works in a checkout, a dirty tree and an unpacked release."""
+    package = Path(__file__).resolve().parents[1]
+    files = {path.relative_to(package).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+             for path in package.rglob("*.py")}
+    return "sha256:" + _digest(files)
+
+
+def identified_route_problem(spec, weights):
     profiles, scenario, comparison = prepare_route_candidates(spec, weights)
-    formulation = formulate_route_assignment_qubo(
-        global_demo_network(), profiles, comparison.recovery_candidates, weights,
-        comparison.normalization_references, scenario,
-    )
-    if formulation.variable_count > MAX_ROUTE_QUBO_VARIABLES:
-        raise ValueError(f"instance requires {formulation.variable_count} variables; supported limit is {MAX_ROUTE_QUBO_VARIABLES}")
+    network = global_demo_network()
+    domain_id = _digest({
+        "schema": "qsupply-route-domain-v1", "spec": spec, "network": network,
+        "shipments": profiles, "disruption": scenario, "weights": weights,
+        "references": comparison.normalization_references,
+        "candidates": comparison.recovery_candidates,
+    })
+    try:
+        formulation = formulate_route_assignment_qubo(
+            network, profiles, comparison.recovery_candidates, weights,
+            comparison.normalization_references, scenario,
+        )
+    except UnsupportedRouteQUBOError as error:
+        error.domain_fingerprint = domain_id
+        raise
+    qubo_id = _digest({
+        "schema": "qsupply-route-qubo-v1", "variables": formulation.variable_order,
+        "offset": str(formulation.offset), "coefficients": [
+            (i, j, str(v)) for (i, j), v in sorted(formulation.qubo.coefficients.items())
+        ],
+    })
+    return formulation, comparison, domain_id, qubo_id
+
+
+def _problem(spec, weights):
+    formulation, comparison, _, _ = identified_route_problem(spec, weights)
     return formulation, comparison
 
 
@@ -299,6 +343,7 @@ def run_route_experiments(
     iterations: int = 2,
     shots: int = 64,
     registry: Any = None,
+    stop_backend_on_failure: bool = False,
 ) -> RouteExperimentReport:
     """Run identical finite route problems through exact, classical and selected QAOA solvers.
 
@@ -331,9 +376,10 @@ def run_route_experiments(
     result_runs: list[ExperimentRun] = []
     summaries: list[Mapping[str, Any]] = []
     manifest_problems: list[dict[str, Any]] = []
+    revision = source_revision()
     for spec in specs:
         for profile_name, weights in profiles_weights.items():
-            formulation, comparison = _problem(spec, weights)
+            formulation, comparison, domain_id, qubo_id = identified_route_problem(spec, weights)
             request = formulation.solver_request(ProblemRepresentation.QUBO)
             fingerprint_payload = {
                 "spec": asdict(spec), "weights": asdict(weights),
@@ -386,7 +432,7 @@ def run_route_experiments(
                                                      "penalty": str(formulation.penalty)},
                                constant_offset=str(formulation.offset),
                                software_versions={"python": platform.python_version(),
-                                   "qsupply": "source-tree", "qiskit": _package_version("qiskit"),
+                                   "qsupply": revision, "qiskit": _package_version("qiskit"),
                                    "qulacs": _package_version("qulacs")},
                                problem_fingerprint=fingerprint)
             def config_for(backend: str, seed: int | None) -> ExperimentConfiguration:
@@ -399,7 +445,8 @@ def run_route_experiments(
                 if assignment is None:
                     return ExperimentRun(config_for(backend, seed), backend, status, False if status == "infeasible" else None, None, None,
                         None, None, str(formulation.offset), None, None, None, (), elapsed, timing,
-                        _freeze(metadata) if metadata else None)
+                        _freeze(metadata) if metadata else None,
+                        domain_fingerprint=domain_id, qubo_fingerprint=qubo_id)
                 evaluation = formulation.evaluate_assignment(assignment)
                 spins = {k: 1 - 2 * v for k, v in assignment.items()}
                 ising_energy = ising.energy(spins)
@@ -414,7 +461,8 @@ def run_route_experiments(
                     str(evaluation.qubo_energy), str(ising_energy), str(formulation.offset),
                     str(evaluation.full_penalized_energy), _text(business),
                     _gap(business, exact_business) if feasible else None, violations,
-                    elapsed, timing, _freeze(metadata) if metadata else None)
+                    elapsed, timing, _freeze(metadata) if metadata else None,
+                        domain_fingerprint=domain_id, qubo_fingerprint=qubo_id)
             exact_routes = dict(exact_evaluation.feasibility.selected_routes) if exact_feasible else None
             result_runs.append(make_run("exact-qubo", "completed", exact.best_binary_assignment,
                 exact_seconds, "exact solver call wall time; excludes formulation and validation",
@@ -432,6 +480,7 @@ def run_route_experiments(
                 result_runs.append(make_run("classical-assignment", "completed", assignment, classical_seconds,
                     "assign_routes call wall time; includes its feasibility checks", {"method": classical.method}, None))
             manifest_problems.append({"problem_id": spec.problem_id, "profile": profile_name,
+                "domain_fingerprint": domain_id, "qubo_fingerprint": qubo_id,
                 "fingerprint": fingerprint, "shipments": len(spec.shipment_ids),
                 "candidate_routes": sum(len(v) for v in formulation.candidates.values()),
                 "variables": formulation.variable_count, "decision_variables": formulation.decision_variable_count,
@@ -446,7 +495,7 @@ def run_route_experiments(
                     "fixed_normalization_references": asdict(comparison.normalization_references)},
                 "penalty_configuration": {"method": "formulation-derived feasible-objective upper bound plus one",
                     "penalty": str(formulation.penalty)},
-                "software_versions": {"python": platform.python_version(), "qsupply": "source-tree",
+                "software_versions": {"python": platform.python_version(), "qsupply": revision,
                     "qiskit": _package_version("qiskit"), "qulacs": _package_version("qulacs")},
                 "constant_offset": str(formulation.offset),
                 "exact_penalized_minimum_feasible": exact_feasible,
@@ -458,16 +507,18 @@ def run_route_experiments(
                         result_runs.append(make_run(backend, "unavailable", None, None,
                             "not measured", {"reason": "registered optional backend is unavailable", "version": registration.version_check()}, seed))
                     continue
-                solver = registration.solver_factory(QAOAConfig(depth=depth, optimizer=optimizer,
-                    max_iterations=iterations, shots=shots, random_seed=seeds[0]))
                 try:
-                    report = benchmark_qaoa_backends_repeated(f"{spec.problem_id}:{profile_name}", request,
-                        (solver,), seeds=seeds)
+                    solver = registration.solver_factory(QAOAConfig(depth=depth, optimizer=optimizer,
+                        max_iterations=iterations, shots=shots, random_seed=seeds[0]))
                 except Exception as error:
                     for seed in seeds:
-                        result_runs.append(make_run(backend, "failed", None, None, "not available after failure",
+                        result_runs.append(make_run(backend, "not_run", None, None, "solver setup failed",
                             {"error_type": type(error).__name__, "error": str(error)}, seed))
                     continue
+                report = benchmark_qaoa_backends_repeated(
+                    f"{spec.problem_id}:{profile_name}", request, (solver,), seeds=seeds,
+                    record_backend_exceptions=True, stop_backend_on_failure=stop_backend_on_failure,
+                )
                 for record in report.runs:
                     if record.best_binary_assignment is None:
                         result_runs.append(make_run(backend, record.status, None, record.execution_time_seconds,
@@ -495,6 +546,7 @@ def run_route_experiments(
                     "timing_scope": summary.timing_scope} for summary in report.summaries)
     manifest = {"schema_version": 1, "synthetic": True, "methodology":
         "All methods use identical generated route candidates, fixed baseline normalization, business objective and independent validator. Exact minima are over the finite QUBO variable space only.",
+        "stop_backend_on_failure": stop_backend_on_failure,
         "requested_seeds": tuple(seeds), "qaoa_configuration": {"depth": depth,
             "optimizer": optimizer, "iterations": iterations, "shots": shots},
         "instances": tuple(manifest_problems),
@@ -515,7 +567,7 @@ def export_experiment_report(report: RouteExperimentReport, directory: str | Pat
         json.dump(_json_value(report.manifest), stream, indent=2, sort_keys=True)
     with paths[1].open("w", encoding="utf-8") as stream:
         json.dump([run.to_dict() for run in report.runs], stream, indent=2, sort_keys=True)
-    fields = ("problem_id", "profile", "solver", "run_count", "energy_count",
+    fields = ("problem_id", "profile", "domain_fingerprint", "qubo_fingerprint", "solver", "run_count", "energy_count",
               "best_full_energy", "worst_full_energy", "mean_full_energy_exact",
               "median_full_energy_exact", "energy_variance_exact", "energy_standard_deviation", "objective_count",
               "best_business_objective", "worst_business_objective",
