@@ -165,6 +165,7 @@ def create_app(
             "http://127.0.0.1:5173",
             "https://qsupply.netlify.app",
             "https://qsupply.macrovisionai.com",
+            "https://qsupplynew.macrovisionai.com",
         ],
         allow_credentials=False,
         allow_methods=["GET", "POST"],

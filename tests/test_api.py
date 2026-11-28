@@ -68,6 +68,7 @@ class TestQSupplyAPI(unittest.TestCase):
             "http://127.0.0.1:5173",
             "https://qsupply.netlify.app",
             "https://qsupply.macrovisionai.com",
+            "https://qsupplynew.macrovisionai.com",
         )
 
         for origin in allowed_origins:
@@ -77,6 +78,38 @@ class TestQSupplyAPI(unittest.TestCase):
                 )
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.headers.get("access-control-allow-origin"), origin)
+
+    def test_cors_preflight_preserves_origins_methods_and_credentials_policy(self):
+        existing = "https://qsupply.macrovisionai.com"
+        new = "https://qsupplynew.macrovisionai.com"
+        unknown = "https://unrecognized.example"
+        read = self.client.get("/api/v1/health", headers={"Origin": unknown})
+        self.assertEqual(read.status_code, 200)
+        self.assertNotIn("access-control-allow-origin", read.headers)
+
+        for origin in (existing, new, unknown):
+            for method, path in (
+                ("GET", "/api/v1/health"),
+                ("POST", "/api/v1/global/optimizations"),
+                ("DELETE", "/api/v1/global/scenarios/synthetic"),
+            ):
+                with self.subTest(origin=origin, method=method):
+                    response = self.client.options(path, headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": method,
+                        "Access-Control-Request-Headers": "content-type",
+                    })
+                    allowed = origin != unknown and method != "DELETE"
+                    self.assertEqual(response.status_code, 200 if allowed else 400)
+                    self.assertEqual(
+                        set(response.headers["access-control-allow-methods"].split(", ")),
+                        {"GET", "POST"},
+                    )
+                    self.assertNotIn("access-control-allow-credentials", response.headers)
+                    if origin == unknown:
+                        self.assertNotIn("access-control-allow-origin", response.headers)
+                    elif allowed:
+                        self.assertEqual(response.headers["access-control-allow-origin"], origin)
 
     def test_post_executes_actual_nearest_neighbor_and_persists_validated_routes(self):
         response = self.submit(solver="nearest-neighbor")
